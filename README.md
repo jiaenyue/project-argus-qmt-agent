@@ -4,17 +4,42 @@
 
 本项目基于 [xtquantai](https://github.com/dfkai/xtquantai) 项目中的 `server_direct.py` 脚本进行修改和定制，专注于提供稳定可靠的数据接口。同时，`xtquantai` 项目本身支持 MCP (Model Context Protocol)，为未来与 AI 助手集成提供了潜力。
 
+## 致谢 (Acknowledgements)
+
+本项目基于 [xtquantai](https://github.com/dfkai/xtquantai) 项目进行修改和定制，并从中获得了许多有益的启发。我们对 `xtquantai` 项目的开发者表示衷心的感谢。
+
 ## 主要功能
 
-*   通过 HTTP API 接口提供 miniQMT 的核心数据查询功能：
-    *   获取交易日历
-    *   获取板块/股票列表
-    *   获取合约详细信息
-    *   获取历史K线数据 (OHLCV)
-    *   (可选) 创建图表面板 (依赖QMT客户端UI交互)
-*   将 Windows 平台的 miniQMT 依赖与上层数据处理系统 (如 Project Argus 的 Docker 化环境) 解耦。
-*   提供基础的日志记录功能。
-*   端口可通过环境变量配置。
+本服务通过基于 **FastAPI** 构建的 HTTP(S) API 接口，提供 miniQMT 的核心数据查询功能，主要包括：
+
+*   **行情数据服务:**
+    *   获取交易日历 (`/trading_dates`)
+    *   获取板块/股票列表 (`/stock_list`)
+    *   获取单只/多只合约的详细信息 (`/instrument_detail`)
+    *   获取多种周期（分钟、日、周、月）的历史K线数据 (OHLCV) (`/hist_kline`)
+    *   获取最新市场行情快照 (`/latest_market`)
+*   **(可选) 客户端交互:**
+    *   创建图表面板 (`/create_chart_panel`) - 此功能依赖QMT客户端的UI交互能力。
+*   **环境解耦:**
+    *   将 Windows 平台的 miniQMT 依赖与上层数据处理系统（例如 Project Argus 的 Docker化/Linux环境）有效隔离。
+*   **易用性与运维:**
+    *   提供基础但全面的日志记录功能 (记录到控制台及 `qmt_data_agent.log` 文件)。
+    *   服务监听端口可通过环境变量 `QMT_DATA_AGENT_PORT`灵活配置。
+    *   通过 FastAPI 自动生成 OpenAPI (Swagger) 交互式API文档 (通常位于 `/docs` 路径)。
+
+## 架构简介
+
+本数据代理服务在逻辑上分为以下几个核心层次：
+
+1.  **`xtquant` 交互层**: 直接通过 `xtquant` Python 库与在本地 Windows 环境中运行的 miniQMT 客户端进行通信，负责执行数据请求和接收原始数据。
+2.  **API 服务层**: 基于 **FastAPI** 构建，负责：
+    *   暴露符合 OpenAPI 规范的 RESTful HTTP(S) API 接口。
+    *   处理客户端的API请求，进行参数校验。
+    *   调用 `xtquant` 交互层获取数据，并将其转换为标准化的JSON格式返回给调用方。
+    *   实现基础的认证 (如API Key)、日志、错误处理等功能。
+3.  **(未来规划) MCP 适配层**: 旨在支持 Model Context Protocol，以便与AI助手等工具集成。
+
+这种分层设计旨在实现模块化和关注点分离，使得系统更易于维护和扩展。更详细的系统架构、组件职责、数据流和部署要求，请参阅 [项目文档中的系统设计文档 (`doc/system_design.md`)](doc/system_design.md)。
 
 ## 先决条件
 
@@ -75,7 +100,9 @@
     您应该会看到服务器启动的日志信息，包括监听的地址和端口。
 
 3.  **日志文件:**
-    代理的运行日志会输出到控制台，并同时记录在与脚本同目录下的 `qmt_data_agent.log` 文件中。
+    代理的运行日志默认会输出到控制台，并同时记录在与脚本同目录下的 `qmt_data_agent.log` 文件中。
+    该日志文件记录了服务的启动、关闭、API请求概要、`xtquant`交互以及潜在的错误信息。
+    关于日志的详细配置、结构化日志格式、日志级别以及与监控系统集成的建议，请参阅 [系统设计文档中的“日志记录和监控”部分 (`doc/system_design.md#5-日志记录和监控`)](doc/system_design.md#5-日志记录和监控)。
 
 ## 持久化运行 (作为 Windows 服务 - 推荐)
 
@@ -160,6 +187,10 @@ MCP 模式允许与兼容的 AI 工具（例如 Cursor AI 编辑器或其他支�
 *   未来可能扩展到更复杂的AI辅助分析或交易指令。
 
 如果需要启用和配置 `xtquantai` 的 MCP 服务器功能，请参考其官方 GitHub 仓库的完整文档。这为 Project Argus 或其他相关系统未来的智能化扩展提供了基础。
+
+## 重要声明与风险提示 (Important Disclaimer and Risk Warning)
+
+本项目为个人学习和技术研究目的创建，并非专业交易软件，**严禁用于任何真实的股票交易或其他金融活动**。用户基于本项目进行的任何操作（包括但不限于模拟交易、数据分析等）所导致的任何直接或间接损失，均由用户自行承担。项目作者及贡献者不对任何因使用或依赖本项目代码及信息而产生的损失负责。
 
 ## 贡献
 
