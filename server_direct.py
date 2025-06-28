@@ -50,9 +50,27 @@ except ImportError as e:
         def __init__(self):
             self.name = "MockXtdata"
         
-        def get_trading_dates(self, market="SH"):
-            print(f"模拟调用get_trading_dates({market})")
-            return ["2023-01-01", "2023-01-02", "2023-01-03"]
+        def get_trading_dates(self, market="SH", start_date: Optional[str] = None, end_date: Optional[str] = None):
+            print(f"模拟调用get_trading_dates(market={market}, start_date={start_date}, end_date={end_date})")
+            # Sample dates in YYYYMMDD format
+            all_dates = {
+                "SH": ["20230101", "20230102", "20230103", "20230104", "20230105",
+                       "20240101", "20240102", "20240103", "20240104", "20240105",
+                       "20250101", "20250102", "20250103", "20250106", "20250107",
+                       "20251229", "20251230", "20251231"],
+                "SZ": ["20230101", "20230102", "20230103", "20230104", "20230105",
+                       "20250101", "20250102", "20250103", "20250106", "20250107"]
+            }
+            market_dates = all_dates.get(market, [])
+
+            filtered_dates = []
+            for date_str in market_dates:
+                if start_date and date_str < start_date:
+                    continue
+                if end_date and date_str > end_date:
+                    continue
+                filtered_dates.append(date_str)
+            return filtered_dates
         
         def get_stock_list_in_sector(self, sector="沪深A股"):
             print(f"模拟调用get_stock_list_in_sector({sector})")
@@ -107,12 +125,43 @@ def ensure_xtdc_initialized():
             print("使用模拟的xtdata模块")
 
 # API 函数
-def get_trading_dates(market="SH"):
+def get_trading_dates(market="SH", start_date_str: Optional[str] = None, end_date_str: Optional[str] = None):
     """获取交易日期"""
     ensure_xtdc_initialized()
     try:
-        dates = xtdata.get_trading_dates(market)
-        return {"success": True, "data": dates}
+        # Assuming xtdata.get_trading_dates returns all dates for the market
+        # and does not support start_date/end_date filtering directly.
+        # If it does, this logic can be simplified.
+        all_dates_raw = xtdata.get_trading_dates(market=market, start_date=start_date_str, end_date=end_date_str)
+
+        if all_dates_raw is None:
+            return {"success": False, "error": f"Failed to fetch trading dates for market {market}"}
+
+        # Convert to YYYYMMDD string format and filter
+        processed_dates = []
+        for date_obj in all_dates_raw:
+            # Assuming date_obj could be datetime object or string YYYY-MM-DD or YYYYMMDD int
+            if hasattr(date_obj, 'strftime'): # datetime object
+                formatted_date = date_obj.strftime('%Y%m%d')
+            elif isinstance(date_obj, str) and '-' in date_obj: # YYYY-MM-DD string
+                formatted_date = date_obj.replace('-', '')
+            elif isinstance(date_obj, int): # YYYYMMDD int
+                formatted_date = str(date_obj)
+            else: # Already YYYYMMDD string or other
+                formatted_date = str(date_obj)
+
+            if not (len(formatted_date) == 8 and formatted_date.isdigit()):
+                print(f"Warning: Skipping malformed date entry: {date_obj}")
+                continue
+
+            # Apply filtering if start_date_str and/or end_date_str are provided
+            if start_date_str and formatted_date < start_date_str:
+                continue
+            if end_date_str and formatted_date > end_date_str:
+                continue
+            processed_dates.append(formatted_date)
+
+        return {"success": True, "data": processed_dates}
     except Exception as e:
         print(f"获取交易日期出错: {str(e)}")
         traceback.print_exc()
@@ -328,7 +377,9 @@ class XTQuantAIHandler(BaseHTTPRequestHandler):
         
         if path == "/api/get_trading_dates":
             market = params.get("market", "SH")
-            result = get_trading_dates(market)
+            start_date = params.get("start_date")
+            end_date = params.get("end_date")
+            result = get_trading_dates(market=market, start_date_str=start_date, end_date_str=end_date)
         
         elif path == "/api/get_stock_list":
             sector = params.get("sector", "沪深A股")
@@ -423,7 +474,9 @@ class XTQuantAIHandler(BaseHTTPRequestHandler):
         
         if path == "/api/get_trading_dates":
             market = params.get("market", "SH")
-            result = get_trading_dates(market)
+            start_date = params.get("start_date")
+            end_date = params.get("end_date")
+            result = get_trading_dates(market=market, start_date_str=start_date, end_date_str=end_date)
         
         elif path == "/api/get_stock_list":
             sector = params.get("sector", "沪深A股")

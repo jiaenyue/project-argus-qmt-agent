@@ -23,9 +23,14 @@
         # 调用交易日历API (对应 xtquant.xtdata.get_trading_dates 功能)
         import requests
         response = requests.get(
-            "http://data-agent-service/trading_dates",
-            params={"market": "SH", "start_date": "20250101", "end_date": "20251231"}
+            "http://data-agent-service/api/get_trading_dates", # Updated endpoint
+            params={"market": "SH", "start_date": "20250101", "end_date": "20250107"} # Dates in YYYYMMDD
         )
+        # Expected response example:
+        # {
+        #   "success": true,
+        #   "data": ["20250101", "20250102", "20250103", "20250106", "20250107"]
+        # }
         print(response.json())
         ```
 
