@@ -108,24 +108,46 @@
 
 ## API 接口说明
 
-本代理主要提供以下 HTTP API 端点 (基于 `xtquantai/server_direct.py`):
+本代理提供符合 OpenAPI (Swagger) 规范的 RESTful API。具体的API接口定义、参数及响应结构与 `doc/system_design.md` 中“接口规范”部分所述一致，并通过 FastAPI 应用在 `/docs` 路径下提供自动生成的 OpenAPI 文档。
 
-*   `GET /api/list_tools`: 列出所有可用的工具/API端点。
-*   `GET/POST /api/get_trading_dates?market=SH`: 获取指定市场的交易日期。
-*   `GET/POST /api/get_stock_list?sector=沪深A股`: 获取指定板块的股票列表。
-*   `GET/POST /api/get_instrument_detail?code=000001.SZ&iscomplete=false`: 获取股票详情。
-*   `GET/POST /api/get_history_market_data?stock_list=000001.SZ&fields=time,open,close&period=1d&start_time=20230101&end_time=20231231`: 获取历史行情数据。
-    *   `stock_list`: 股票代码，或多个代码以逗号分隔。
-    *   `fields`: 需要的字段，以逗号分隔。
-    *   `period`: 周期 (e.g., `1m`, `5m`, `1d`, `1wk`, `1mon`)。
-    *   `start_time`, `end_time`: 开始/结束时间 (格式 `YYYYMMDD` 或 `YYYYMMDDHHMMSS`)。
-    *   `count`: 数据点数量 (与 `start_time`/`end_time` 配合使用)。
-    *   `dividend_type`: 复权类型 (`none`, `front`, `back`)。
-    *   `fill_data`: 是否填充停牌期间数据。
-*   `GET/POST /api/create_chart_panel?codes=000001.SZ&period=1d&indicator_name=MA...`: (QMT UI交互) 创建图表面板。
-*   `GET/POST /api/create_custom_layout?codes=000001.SZ...`: (QMT UI交互) 创建自定义布局。
+以下为主要数据获取接口的概览 (具体参数请参考 `/docs` 或 `doc/system_design.md`):
 
-所有API成功时返回 `{"success": true, "data": ...}`，失败时返回 `{"success": false, "error": "...", "debug_info": "..."}`。
+*   **获取交易日历:** `GET /trading_dates`
+    *   参数: `market`, `start_date`, `end_date`
+*   **获取板块股票列表:** `GET /stock_list`
+    *   参数: `sector`
+*   **获取合约详细信息:** `GET /instrument_detail`
+    *   参数: `symbol`
+*   **获取历史K线数据:** `GET /hist_kline`
+    *   参数: `symbol`, `start_date`, `end_date`, `frequency`, `dividend_type` (复权类型), `fill_data` (是否填充) 等。
+*   **获取最新行情快照:** `GET /latest_market`
+    *   参数: `symbols` (逗号分隔的股票代码列表)
+*   **获取完整行情数据:** `GET /full_market` (较少使用，通常 `/latest_market` 或 `/hist_kline` 已足够)
+    *   参数: `symbol`, `fields` (可选)
+*   **(可选) 创建图表面板:** `POST /create_chart_panel` (依赖QMT客户端UI交互)
+    *   参数: 具体参数待定，通常包括 `codes`, `period`, `indicator_name` 等。
+
+**通用请求头部:**
+*   `X-API-Key`: (推荐) 用于认证的API密钥。实际认证机制以最终实现为准。
+
+**通用响应结构 (示意):**
+*   成功时: HTTP状态码 `200 OK`，响应体通常为JSON格式，包含请求的数据。
+    ```json
+    // 例如: GET /instrument_detail?symbol=600519.SH
+    {
+      "symbol": "600519.SH",
+      "name": "贵州茅台",
+      "last_price": 1700.00,
+      // ... 其他字段
+    }
+    ```
+*   失败时: HTTP状态码 `4xx` (客户端错误) 或 `5xx` (服务器错误)，响应体通常包含错误信息。
+    ```json
+    {
+      "detail": "Error message explaining what went wrong."
+    }
+    ```
+    *注: 旧版或基于 `xtquantai/server_direct.py` 直接修改的版本可能采用 `{"success": true/false, "data": ..., "error": ...}` 结构。本文档描述的是推荐的 RESTful 风格。请以服务实际提供的 `/docs` 为准。*
 
 ## 未来潜力: MCP (Model Context Protocol) 服务器
 
