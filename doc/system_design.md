@@ -108,20 +108,21 @@ response = requests.get(
 ```mermaid
 graph TD
     subgraph "Windows Server/PC"
-        QMT[miniQMT Client]
-        AGENT[QMT Data Agent (Python FastAPI on port 8000)]
+        QMT["miniQMT Client"]
+        AGENT["QMT Data Agent (Python FastAPI on port 8000)"]
     end
     subgraph "Docker Environment / Other Systems"
-        ARGUS[Project Argus Core]
+        ARGUS["Project Argus Core"]
         KAFKA[(Kafka)]
         AIRFLOW[(Airflow)]
-        OTHER_CONSUMERS[Other API Consumers]
+        OTHER_CONSUMERS["Other API Consumers"]
     end
     QMT --> AGENT
-    AGENT -- HTTP(S) --> ARGUS
-    AGENT -- HTTP(S) --> OTHER_CONSUMERS
+    AGENT -- HTTPS --> ARGUS
+    AGENT -- HTTPS --> OTHER_CONSUMERS
     ARGUS --> KAFKA
     ARGUS --> AIRFLOW
+
 ```
 
 ### 配置要求
