@@ -1,8 +1,8 @@
-# Project Argus: 天枢计划
+# Project Argus QMT Data Agent: 用户故事
 
-## 项目用户故事（数据代理服务核心场景）
+本文档定义了 Project Argus QMT 数据代理服务的用户故事。用户故事从不同项目角色的视角出发，描述了他们期望通过本服务实现的功能和价值。这些故事驱动着服务的设计和开发，确保其满足实际用户需求。用户故事被组织成不同的史诗 (Epics)，代表了主要的功能领域或开发阶段。
 
-### 项目角色 (Personas)
+## 项目角色 (Personas)
 
 *   **量化分析师 (Quantitative Analyst):** 数据的最终用户，追求数据的准确性、完整性、多维度和易用性，以构建可靠的交易策略。
 *   **数据工程师 (Data Engineer):** 数据管道的建设者，关注数据流的效率、代码的健壮性和数据模型的正确性。
@@ -20,7 +20,7 @@
     *   **以便** 确保交易策略在正确的交易日执行。
     *   **API调用示例:**
         ```python
-        # 调用交易日历API (对应xtdata.md的get_trading_dates)
+        # 调用交易日历API (对应 xtquant.xtdata.get_trading_dates 功能)
         import requests
         response = requests.get(
             "http://data-agent-service/trading_dates",
@@ -35,7 +35,7 @@
     *   **以便** 进行策略回测和数据分析。
     *   **API调用示例:**
         ```python
-        # 调用历史K线API (对应xtdata.md的get_history_market_data)
+        # 调用历史K线API (对应 xtquant.xtdata.get_history_market_data 功能)
         import requests
         params = {
             "symbol": "600519.SH",
@@ -53,7 +53,7 @@
     *   **以便** 监控市场状态和系统健康状况。
     *   **API调用示例:**
         ```python
-        # 调用实时合约API (对应xtdata.md的get_instrument_detail)
+        # 调用实时合约API (对应 xtquant.xtdata.get_instrument_detail 功能)
         import requests
         response = requests.get(
             "http://data-agent-service/instrument_detail",
@@ -68,7 +68,7 @@
     *   **以便** 快速构建投资组合和进行板块分析。
     *   **API调用示例:**
         ```python
-        # 调用板块股票API (对应xtdata.md的get_stock_list_in_sector)
+        # 调用板块股票API (对应 xtquant.xtdata.get_stock_list_in_sector 功能)
         import requests
         response = requests.get(
             "http://data-agent-service/stock_list",
@@ -83,7 +83,7 @@
     *   **以便** 深入了解标的资产的基本面情况。
     *   **API调用示例:**
         ```python
-        # 调用股票详情API (对应xtdata.md的get_instrument_detail)
+        # 调用股票详情API (对应 xtquant.xtdata.get_instrument_detail 功能)
         import requests
         response = requests.get(
             "http://data-agent-service/instrument_detail",
@@ -98,7 +98,7 @@
     *   **以便** 实时监控市场动态和交易机会。
     *   **API调用示例:**
         ```python
-        # 调用最新行情API (对应xtdata.md的get_latest_market_data)
+        # 调用最新行情API (对应 xtquant.xtdata.get_latest_market_data 功能)
         import requests
         response = requests.get(
             "http://data-agent-service/latest_market",
@@ -113,7 +113,7 @@
     *   **以便** 进行深度市场分析和策略开发。
     *   **API调用示例:**
         ```python
-        # 调用完整行情API (对应xtdata.md的get_full_market_data)
+        # 调用完整行情API (对应 xtquant.xtdata.get_full_market_data 功能)
         import requests
         response = requests.get(
             "http://data-agent-service/full_market",
@@ -125,7 +125,7 @@
 ---
 
 ### Epic 2: (未来规划) AI集成与智能化扩展
-**目标:** 探索并利用`xtquantai`的MCP特性，实现与AI工具的集成，提升数据分析与操作的智能化水平。
+**目标:** 探索并利用 `xtquantai` 项目的 Model Context Protocol (MCP) 特性，实现与AI工具的集成，提升数据分析与操作的智能化水平。此举旨在降低数据获取和初步分析的门槛，使得分析师可以将更多精力聚焦于策略研发本身，并可能催生新的数据交互和分析范式。
 
 *   **故事 2.1: 通过AI助手查询QMT数据**
     *   **作为** 一名高级量化分析师，
@@ -147,9 +147,12 @@
         2.  QMT客户端能够根据指令正确显示生成的图表。
         3.  支持至少两种常用技术指标的图表生成。
 
-### Epic 3: 交易执行服务核心场景
+---
+### Epic 3: (相关系统规划) 交易执行服务核心场景
+**注意:** 此 Epic 描述的是一个独立的交易执行代理服务 (Trade Agent Service)，它与本 QMT 数据代理服务 (QMT Data Agent) 是分离但相关的组件。QMT 数据代理专注于数据查询，而交易执行服务专注于处理交易指令。两者可能共同作为 Project Argus 的组成部分。
+
 **目标:** 提供稳定可靠的交易执行功能，支持策略交易和资产管理。
-**可交付成果:** 高性能的交易执行服务API。
+**可交付成果:** 高性能的交易执行服务API (例如，通过 `http://trade-agent-service` 访问)。
 
 *   **故事 3.1: 异步下单**
     *   **作为** 交易员，
