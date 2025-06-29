@@ -7,7 +7,7 @@ import os
 import pandas as pd  
 
 # 模拟xtdata和xttrader模块  
-sys.modules['极data'] = MagicMock()  
+sys.modules['xtdata'] = MagicMock()  
 sys.modules['xttrader'] = MagicMock()  
 
 # 添加项目根目录到Python路径  
