@@ -1,3 +1,4 @@
+  
 # Project Argus QMT Data Agent: 用户故事
 
 本文档定义了 Project Argus QMT 数据代理服务的用户故事。用户故事从不同项目角色的视角出发，描述了他们期望通过本服务实现的功能和价值。这些故事驱动着服务的设计和开发，确保其满足实际用户需求。用户故事被组织成不同的史诗 (Epics)，代表了主要的功能领域或开发阶段。
@@ -19,20 +20,30 @@
     *   **我想要** 通过数据代理服务API获取准确的交易日历数据，
     *   **以便** 确保交易策略在正确的交易日执行。
     *   **API调用示例:**
+        支持MCP工具调用和HTTP REST API两种方式
+
+        ### 调用方式一：HTTP REST API
         ```python
-        # 调用交易日历API (对应 xtquant.xtdata.get_trading_dates 功能)
         import requests
         response = requests.get(
-            "http://data-agent-service/api/get_trading_dates", # Updated endpoint
-            params={"market": "SH", "start_date": "20250101", "end_date": "20250107"} # Dates in YYYYMMDD
+            "http://localhost:8000/api/get_trading_dates",
+            params={"market": "SH", "start_date": "20250101", "end_date": "20250107"}
         )
+        print(response.json())
+        ```
+
+        ### 调用方式二：MCP工具调用
+        ```python
+        # 通过MCP协议调用
+        result = await mcp_client.call("get_trading_dates", market="SH", start_date="20250101", end_date="20250107")
+        print(result)
+        ```
+
         # Expected response example:
         # {
         #   "success": true,
         #   "data": ["20250101", "20250102", "20250103", "20250106", "20250107"]
         # }
-        print(response.json())
-        ```
 
 *   **故事 1.2: 分析工具获取历史K线数据**
     *   **作为** 量化分析师，
@@ -253,4 +264,3 @@
             params={"account_id": "1000000365"}
         )
         print(response.json())
-        ```
