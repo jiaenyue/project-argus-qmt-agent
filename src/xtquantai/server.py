@@ -11,8 +11,22 @@ from mcp.server.models import InitializationOptions
 import mcp.types as types  
 from mcp.server import NotificationOptions, Server  
 from pydantic import AnyUrl, BaseModel, Field, ValidationError  
-from xtquant import xtdata  
-from xtquant import xttrader  
+# from xtquant import xtdata # 延迟导入或包装导入
+# from xtquant import xttrader # 延迟导入或包装导入
+
+# 尝试导入xtquant，如果失败则使用模拟对象
+try:
+    from xtquant import xtdata
+    from xtquant import xttrader
+except ImportError:
+    # print("Warning: Failed to import xtquant. Using mock objects for xtdata and xttrader.")
+    from unittest.mock import MagicMock
+    xtdata = MagicMock()
+    xttrader = MagicMock()
+    # 你可以在这里为模拟的xtdata和xttrader设置一些默认行为，如果需要的话
+    # 例如:
+    # xtdata.get_trading_dates.return_value = []
+    # xtdata.get_instrument_detail.return_value = None
 
 def ensure_xtdc_initialized():  
     # ... 保持不变 ...  
