@@ -76,7 +76,7 @@ response = requests.get(
 
 | 端点路径                 | 方法 | 主要参数                                     | 简要描述                       | 对应 `xtquant` 功能 (参考)         |
 |--------------------------|------|----------------------------------------------|--------------------------------|------------------------------------|
-| `/trading_dates`         | GET  | `market`, `start_date`, `end_date`           | 获取指定市场和日期范围的交易日历 | `xtdata.get_trading_dates`         |
+| `/api/get_trading_dates` | GET  | `market` (e.g., "SH", "SZ"), `start_date` (YYYYMMDD, optional), `end_date` (YYYYMMDD, optional) | 获取指定市场和日期范围的交易日历 | `xtdata.get_trading_dates`         |
 | `/stock_list`            | GET  | `sector` (如 "沪深A股", "上证A股")           | 获取板块内的股票列表           | `xtdata.get_stock_list_in_sector`  |
 | `/instrument_detail`     | GET  | `symbol` (如 "600519.SH")                    | 获取单个合约的详细信息         | `xtdata.get_instrument_detail`     |
 | `/hist_kline`            | GET  | `symbol`, `start_date`, `end_date`, `frequency` (e.g., "1m", "1d") | 获取历史K线数据 (OHLCV)        | `xtdata.get_history_market_data`   |
