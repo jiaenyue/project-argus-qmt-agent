@@ -92,46 +92,53 @@
 ## 运行代理服务
 
 1.  **确保 miniQMT 客户端已登录并正常运行。**
-2.  **启动代理脚本：**
-    打开命令行工具 (CMD 或 PowerShell)，导航到脚本所在目录，然后运行：
-    ```bash
-    python qmt_data_agent.py
-    ```
-    您应该会看到服务器启动的日志信息，包括监听的地址和端口。
+2.  **详细安装与配置:**
+    Please refer to the [Installation Guide (INSTALL.md)](INSTALL.md) for detailed setup instructions, including:
+    *   Setting up the Python environment (Python 3.11+).
+    *   Creating a virtual environment (e.g., `qmt_env`).
+    *   Installing dependencies from `pyproject.toml` (using `pip install .`).
+    *   Verifying `xtquant` accessibility.
 
-3.  **日志文件:**
-    代理的运行日志默认会输出到控制台，并同时记录在与脚本同目录下的 `qmt_data_agent.log` 文件中。
-    该日志文件记录了服务的启动、关闭、API请求概要、`xtquant`交互以及潜在的错误信息。
-    关于日志的详细配置、结构化日志格式、日志级别以及与监控系统集成的建议，请参阅 [系统设计文档中的“日志记录和监控”部分 (`doc/system_design.md#5-日志记录和监控`)](doc/system_design.md#5-日志记录和监控)。
+## 运行代理服务
+
+Once installed and configured as per [INSTALL.md](INSTALL.md), you can run the server using the `main.py` script located in the project root.
+
+1.  **Ensure miniQMT 客户端已登录并正常运行 (if using live data).**
+2.  **Activate your Python virtual environment (e.g., `qmt_env`).**
+3.  **Navigate to the project root directory and run:**
+    ```bash
+    python main.py
+    ```
+    This will start the server in automatic mode (tries MCP Inspector first, then falls back to direct mode). You can also specify modes:
+    *   `python main.py --mode direct`
+    *   `python main.py --mode inspector` (requires Node.js and npx)
+
+    You should see server startup log messages.
+
+4.  **日志文件:**
+    The server primarily logs to the console. The older `server_direct.py` (used as a fallback) might create `qmt_data_agent.log`, but the main MCP server logs to standard output. For detailed logging configuration, especially in an MCP context, refer to MCP documentation or server output.
+    The original project's logging discussion can be found in [系统设计文档中的“日志记录和监控”部分 (`doc/system_design.md#5-日志记录和监控`)](doc/system_design.md#5-日志记录和监控).
 
 ## 持久化运行 (作为 Windows 服务 - 推荐)
 
-为了确保代理服务在系统重启后依然能够自动运行，并能在后台稳定工作，建议将其注册为 Windows 服务。可以使用 `NSSM (Non-Sucking Service Manager)` 工具。
+To run the agent persistently as a Windows service, you can use `NSSM`. Refer to the [Installation Guide (INSTALL.md)](INSTALL.md) for general setup, then adapt the NSSM configuration:
 
-1.  **下载 NSSM:** 从 [NSSM 官网](https://nssm.cc/download) 下载最新版本。
-2.  **安装服务:**
-    *   将 `nssm.exe` 放置到一个合适的目录 (例如 `C:\NSSM\`)。
-    *   以管理员身份打开命令行。
-    *   执行以下命令安装服务 (请根据您的实际路径修改)：
-        ```bash
-        C:\NSSM\nssm.exe install ProjectArgusQMTDataAgent
-        ```
-    *   在弹出的 NSSM 服务编辑器中：
-        *   **Application Tab:**
-            *   **Path:** 浏览到您的 Python 解释器路径 (例如 `C:\Python311\python.exe` 或虚拟环境中的 `\.venv\Scripts\python.exe`)。
-            *   **Startup directory:** 浏览到 `qmt_data_agent.py` 脚本所在的目录 (例如 `C:\project-argus-qmt-agent\`)。
-            *   **Arguments:** 填写脚本名称 `qmt_data_agent.py`。
-        *   **Environment Tab (可选，如果需要设置端口):**
-            *   添加环境变量：`QMT_DATA_AGENT_PORT=8001` (替换为您希望的端口)。
-        *   **Details Tab:** 可以设置服务的显示名称和描述。
-        *   **I/O Tab (可选):** 可以配置标准输出和错误输出的重定向，但脚本本身已包含日志文件功能。
-        *   **Shutdown Tab:** 确保 "Generate control-C" 被选中，以便正常关闭Python应用。
-    *   点击 "Install service"。
-3.  **启动服务:**
+1.  **Download NSSM:** From [NSSM 官网](https://nssm.cc/download).
+2.  **Install Service (Example):**
+    *   Place `nssm.exe` in a suitable directory (e.g., `C:\NSSM\`).
+    *   Open command prompt as Administrator.
+    *   Run `C:\NSSM\nssm.exe install ProjectArgusQMTDataAgent`
+    *   In the NSSM GUI:
+        *   **Path:** Path to your Python interpreter within your virtual environment (e.g., `C:\project-argus-qmt-agent\qmt_env\Scripts\python.exe`).
+        *   **Startup directory:** The root directory of this project (e.g., `C:\project-argus-qmt-agent\`).
+        *   **Arguments:** `main.py` (or `main.py --mode direct` if you prefer a specific mode).
+        *   **Environment Tab (Optional):** Set `QMT_DATA_AGENT_PORT` if `server_direct.py` is used as a fallback and you need a specific port for it.
+    *   Click "Install service".
+3.  **Start Service:**
     ```bash
     C:\NSSM\nssm.exe start ProjectArgusQMTDataAgent
     ```
-    或者通过 Windows 服务管理器 (services.msc) 启动。
+    Or use Windows Services Manager (`services.msc`).
 
 ## API 接口说明
 
