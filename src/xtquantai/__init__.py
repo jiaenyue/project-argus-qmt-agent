@@ -20,7 +20,8 @@ def main():
     print("8. 创建自定义布局 - create_custom_layout")
     
     # 运行MCP服务器
-    asyncio.run(server.main())
+    # 'server' is the module, 'server.server' is the CustomServer instance within that module.
+    asyncio.run(server.server.start())
 
 # Optionally expose other important items at package level
 __all__ = ['main', 'server']
