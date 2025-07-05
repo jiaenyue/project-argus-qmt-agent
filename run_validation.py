@@ -6,7 +6,10 @@ import datetime
 def run_command(command, description, shell=True, capture_output=True):
     print(f"Running: {description}")
     try:
-        result = subprocess.run(command, shell=shell, capture_output=capture_output, text=True, encoding='utf-8', errors='ignore')
+        # Set PYTHONIOENCODING to utf-8 for subprocesses to handle Unicode characters
+        env = os.environ.copy()
+        env['PYTHONIOENCODING'] = 'utf-8'
+        result = subprocess.run(command, shell=shell, capture_output=capture_output, text=True, encoding='utf-8', errors='ignore', env=env)
         if capture_output:
             print(f"Stdout:\n{result.stdout}")
             print(f"Stderr:\n{result.stderr}")
@@ -50,7 +53,7 @@ def main():
 
     # API connection test
     report_content.append("正在测试API连接...")
-    api_test_command = f'{python_executable} -c "import os; os.environ[\'NO_PROXY\'] = \'localhost,127.0.0.1\'; import requests; r = None; try: r=requests.get(\'http://localhost:8000/api/v1/status\', timeout=3) except requests.exceptions.RequestException as e: print(\'API连接错误: {}\'.format(e)) else: print(\'API状态: {}.{}\'.format(r.status_code, r.text))"'
+    api_test_command = f'{python_executable} -c "import os; os.environ[\'NO_PROXY\'] = \'localhost,127.0.0.1\'; import requests; r = None; try: r=requests.get(\'http://localhost:8000/api/v1/status\', timeout=3) except requests.exceptions.RequestException as e: print(\'API连接错误: {{}}\'.format(e)) else: print(\'API状态: {{}}.{{}}\'.format(r.status_code, r.text))"'
     result = run_command(api_test_command, "API connection test")
     if result and result.returncode == 0 and "200" in result.stdout:
         report_content.append("[成功] API连接正常")
