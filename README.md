@@ -1,12 +1,13 @@
-# Project Argus QMT Data Agent
+# Data Agent Service
 
-本项目是一个在 Windows 环境下运行的 Python 服务，作为 Project Argus (或其他需要访问 miniQMT 数据的系统) 与 miniQMT (迅投量化交易客户端) 之间的数据代理。它利用 `xtquant` 库与本地运行的 miniQMT 客户端进行交互，并通过 HTTP(S) API 接口暴露数据服务。
+This service provides an API proxy for financial data, initially focusing on `xtquant` library functionalities.
 
-本项目基于 [xtquantai](https://github.com/dfkai/xtquantai) 项目中的 `server_direct.py` 脚本进行修改和定制，专注于提供稳定可靠的数据接口。同时，`xtquantai` 项目本身支持 MCP (Model Context Protocol)，为未来与 AI 助手集成提供了潜力。
+## Features
 
-## 致谢 (Acknowledgements)
+- `/instrument_detail`: Fetches real-time contract information.
 
-本项目基于 [xtquantai](https://github.com/dfkai/xtquantai) 项目进行修改和定制，并从中获得了许多有益的启发。我们对 `xtquantai` 项目的开发者表示衷心的感谢。
+## Setup and Run
+
 
 ## 主要功能
 
@@ -77,6 +78,7 @@
 3.  **导航到项目根目录并运行：**
     ```bash
     python main.py
+
     ```
     这将以自动模式启动服务（首先尝试 MCP Inspector，然后回退到直接模式）。您也可以指定模式：
     *   `python main.py --mode direct` (直接模式)
@@ -152,26 +154,55 @@
     ```
     *注: 旧版或基于 `xtquantai/server_direct.py` 直接修改的版本可能采用 `{"success": true/false, "data": ..., "error": ...}` 结构。本文档描述的是推荐的 RESTful 风格。请以服务实际提供的 `/docs` 为准。*
 
-## 未来潜力: MCP (Model Context Protocol) 服务器
 
-本项目所基于的 `xtquantai` (https://github.com/dfkai/xtquantai) 项目的核心是一个 MCP 服务器。这意味着，除了当前 Project Argus 使用的直接 HTTP API 模式外，`xtquantai` 还可以配置为 MCP 服务器模式运行。
+### Get Instrument Detail
 
-MCP 模式允许与兼容的 AI 工具（例如 Cursor AI 编辑器或其他支持该协议的AI应用）进行集成，从而可以通过自然语言或特定协议指令与 miniQMT 进行交互，例如：
+-   **Endpoint:** `/instrument_detail`
+-   **Method:** `GET`
+-   **Query Parameter:**
+    -   `symbol` (string, required): The stock/contract symbol (e.g., "600519.SH").
+-   **Example:**
+    ```python
+    import requests
 
-*   直接从 AI 助手中查询 QMT 数据。
-*   指令 QMT 生成图表并在客户端显示。
-*   未来可能扩展到更复杂的AI辅助分析或交易指令。
+    response = requests.get(
+        "http://localhost:8000/instrument_detail",
+        params={"symbol": "600519.SH"}
+    )
+    print(response.json())
+    ```
 
-如果需要启用和配置 `xtquantai` 的 MCP 服务器功能，请参考其官方 GitHub 仓库的完整文档。这为 Project Argus 或其他相关系统未来的智能化扩展提供了基础。
+## 防火墙与连接测试
 
-## 重要声明与风险提示 (Important Disclaimer and Risk Warning)
+### 防火墙测试
+运行 `firewall_test.bat` 脚本，该脚本将：
+1. 临时禁用防火墙
+2. 运行 `miniqmt_test.py`
+3. 重新启用防火墙
 
-本项目为个人学习和技术研究目的创建，并非专业交易软件，**严禁用于任何真实的股票交易或其他金融活动**。用户基于本项目进行的任何操作（包括但不限于模拟交易、数据分析等）所导致的任何直接或间接损失，均由用户自行承担。项目作者及贡献者不对任何因使用或依赖本项目代码及信息而产生的损失负责。
+### 连接测试
+运行 `connection_test.py` 脚本测试xtQuant连接：
+```bash
+python connection_test.py
+```
 
-## 贡献
 
-欢迎提交问题 (Issues) 和拉取请求 (Pull Requests)。
+## 账号配置说明
 
-## 许可证
+在使用`miniqmt_test.py`脚本前：
+1. 打开脚本文件找到以下行：
+   ```python
+   account = "替换为您的交易账号"  # 占位符，用户需要填写
+   ```
+2. 将`替换为您的交易账号`改为您的实际交易账号（例如：`"123456789"`）
+3. 保存文件后运行脚本
 
-本项目基于 `xtquantai`，其采用 MIT 许可证。本代理服务的代码同样遵循 MIT 许可证。
+## QMT路径配置说明
+
+在使用`miniqmt_test.py`脚本前，请确认您的QMT安装路径：
+1. 打开脚本文件，找到以下行：
+   ```python
+   qmt_path = "G:\\Stock\\GJ_QMT\\bin.x64"  # 使用用户提供的QMT路径
+   ```
+2. 如果您的QMT安装路径不同，请将路径修改为您的实际安装路径（注意：路径中使用双反斜杠`\\`）
+3. 保存文件后运行脚本

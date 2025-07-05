@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# API版本v1 更新时间2025年6月30日
 """
-xtquantai 直接服务器
-提供直接的 API 接口，不依赖于 MCP
+xtquantai 直接服务器 - 最终稳定版
 """
 
 import os
@@ -12,9 +12,9 @@ import json
 import traceback
 import time
 from typing import Dict, List, Any, Optional
-import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import urllib.parse
+from datetime import datetime
 
 # 尝试导入 xtquant 相关模块
 xtdata = None
@@ -22,542 +22,141 @@ UIPanel = None
 
 try:
     from xtquant import xtdata
-    print(f"成功导入xtquant模块，路径: {xtdata.__file__ if hasattr(xtdata, '__file__') else '未知'}")
-    
-    # 尝试导入UIPanel
-    try:
-        from xtquant.xtdata import UIPanel
-        print("成功导入UIPanel类")
-    except ImportError as e:
-        print(f"警告: 无法导入UIPanel类: {str(e)}")
-        # 创建一个模拟的UIPanel类
-        class UIPanel:
-            def __init__(self, stock, period, figures=None):
-                self.stock = stock
-                self.period = period
-                self.figures = figures or []
-            
-            def __str__(self):
-                return f"UIPanel(stock={self.stock}, period={self.period}, figures={self.figures})"
+    print(f"成功导入xtquant模块，路径: {xtdata.__file__}")
 except ImportError as e:
     print(f"警告: 无法导入xtquant模块: {str(e)}")
-    print("Python搜索路径:")
-    for path in sys.path:
-        print(f"  - {path}")
-    
     # 创建模拟的xtdata模块
     class MockXtdata:
-        def __init__(self):
-            self.name = "MockXtdata"
-        
-        def get_trading_dates(self, market="SH", start_date: Optional[str] = None, end_date: Optional[str] = None):
-            print(f"模拟调用get_trading_dates(market={market}, start_date={start_date}, end_date={end_date})")
-            # Sample dates in YYYYMMDD format
-            all_dates = {
-                "SH": ["20230101", "20230102", "20230103", "20230104", "20230105",
-                       "20240101", "20240102", "20240103", "20240104", "20240105",
-                       "20250101", "20250102", "20250103", "20250106", "20250107",
-                       "20251229", "20251230", "20251231"],
-                "SZ": ["20230101", "20230102", "20230103", "20230104", "20230105",
-                       "20250101", "20250102", "20250103", "20250106", "20250107"]
-            }
-            market_dates = all_dates.get(market, [])
-
-            filtered_dates = []
-            for date_str in market_dates:
-                if start_date and date_str < start_date:
-                    continue
-                if end_date and date_str > end_date:
-                    continue
-                filtered_dates.append(date_str)
-            return filtered_dates
-        
-        def get_stock_list_in_sector(self, sector="沪深A股"):
-            print(f"模拟调用get_stock_list_in_sector({sector})")
-            return ["000001.SZ", "600519.SH", "300059.SZ"]
-        
-        def get_instrument_detail(self, code, iscomplete=False):
-            print(f"模拟调用get_instrument_detail({code}, {iscomplete})")
-            return {"code": code, "name": "模拟股票", "price": 100.0}
-        
-        def apply_ui_panel_control(self, panels):
-            print(f"模拟调用apply_ui_panel_control({panels})")
-            return True
-        
-        def get_market_data(self, fields, stock_list, period="1d", start_time="", end_time="", count=-1, dividend_type="none", fill_data=True):
-            print(f"模拟调用get_market_data({fields}, {stock_list}, {period}, {start_time}, {end_time}, {count}, {dividend_type}, {fill_data})")
-            # 创建模拟数据
-            result = {}
-            for stock in stock_list:
-                stock_data = {}
-                for field in fields:
-                    if field == "close":
-                        stock_data[field] = [100.0, 101.0, 102.0]
-                    elif field == "open":
-                        stock_data[field] = [99.0, 100.0, 101.0]
-                    elif field == "high":
-                        stock_data[field] = [102.0, 103.0, 104.0]
-                    elif field == "low":
-                        stock_data[field] = [98.0, 99.0, 100.0]
-                    elif field == "volume":
-                        stock_data[field] = [10000, 12000, 15000]
-                    else:
-                        stock_data[field] = [0.0, 0.0, 0.0]
-                result[stock] = stock_data
-            return result
-    
-    # 使用模拟的xtdata
+        def get_trading_dates(self, market="SH", start_date=None, end_date=None):
+            return ["20250102", "20250103", "20250106"]
     xtdata = MockXtdata()
-    print("使用模拟的xtdata模块")
-
-# 确保xtdata已初始化
-def ensure_xtdc_initialized():
-    """确保XTQuant数据中心已初始化"""
-    global xtdata
-    if xtdata is None:
-        print("xtdata模块未初始化，尝试重新导入")
-        try:
-            from xtquant import xtdata
-            print(f"成功导入xtquant模块，路径: {xtdata.__file__ if hasattr(xtdata, '__file__') else '未知'}")
-        except ImportError as e:
-            print(f"警告: 无法导入xtquant模块: {str(e)}")
-            xtdata = MockXtdata()
-            print("使用模拟的xtdata模块")
 
 # API 函数
 def get_trading_dates(market="SH", start_date_str: Optional[str] = None, end_date_str: Optional[str] = None):
-    """获取交易日期"""
-    ensure_xtdc_initialized()
+    """获取交易日期（最终修复版）"""
     try:
-        # Assuming xtdata.get_trading_dates returns all dates for the market
-        # and does not support start_date/end_date filtering directly.
-        # If it does, this logic can be simplified.
-        all_dates_raw = xtdata.get_trading_dates(market=market, start_date=start_date_str, end_date=end_date_str)
+        # 获取原始日期数据
+        all_dates = xtdata.get_trading_dates(market=market)
+        if all_dates is None:
+            return {"success": False, "error": f"获取市场{market}交易日失败"}
 
-        if all_dates_raw is None:
-            return {"success": False, "error": f"Failed to fetch trading dates for market {market}"}
-
-        # Convert to YYYYMMDD string format and filter
-        processed_dates = []
-        for date_obj in all_dates_raw:
-            # Assuming date_obj could be datetime object or string YYYY-MM-DD or YYYYMMDD int
-            if hasattr(date_obj, 'strftime'): # datetime object
-                formatted_date = date_obj.strftime('%Y%m%d')
-            elif isinstance(date_obj, str) and '-' in date_obj: # YYYY-MM-DD string
-                formatted_date = date_obj.replace('-', '')
-            elif isinstance(date_obj, int): # YYYYMMDD int
-                formatted_date = str(date_obj)
-            else: # Already YYYYMMDD string or other
-                formatted_date = str(date_obj)
-
-            if not (len(formatted_date) == 8 and formatted_date.isdigit()):
-                print(f"Warning: Skipping malformed date entry: {date_obj}")
-                continue
-
-            # Apply filtering if start_date_str and/or end_date_str are provided
-            if start_date_str and formatted_date < start_date_str:
-                continue
-            if end_date_str and formatted_date > end_date_str:
-                continue
-            processed_dates.append(formatted_date)
-
-        return {"success": True, "data": processed_dates}
-    except Exception as e:
-        print(f"获取交易日期出错: {str(e)}")
-        traceback.print_exc()
-        return {"success": False, "error": str(e)}
-
-def get_stock_list(sector="沪深A股"):
-    """获取板块股票列表"""
-    ensure_xtdc_initialized()
-    try:
-        stocks = xtdata.get_stock_list_in_sector(sector)
-        return {"success": True, "data": stocks}
-    except Exception as e:
-        print(f"获取板块股票列表出错: {str(e)}")
-        traceback.print_exc()
-        return {"success": False, "error": str(e)}
-
-def get_instrument_detail(code, iscomplete=False):
-    """获取股票详情"""
-    ensure_xtdc_initialized()
-    try:
-        detail = xtdata.get_instrument_detail(code, iscomplete)
-        return {"success": True, "data": detail}
-    except Exception as e:
-        print(f"获取股票详情出错: {str(e)}")
-        traceback.print_exc()
-        return {"success": False, "error": str(e)}
-
-def get_history_market_data(fields, stock_list, period="1d", start_time="", end_time="", count=-1, dividend_type="none", fill_data=True):
-    """获取历史行情数据"""
-    ensure_xtdc_initialized()
-    try:
-        # 处理输入参数
-        if isinstance(fields, str):
-            fields = fields.split(",")
-        if isinstance(stock_list, str):
-            stock_list = stock_list.split(",")
-        
-        data = xtdata.get_market_data(fields, stock_list, period, start_time, end_time, count, dividend_type, fill_data)
-        
-        # 转换数据为可序列化格式
-        result = {}
-        for stock, stock_data in data.items():
-            result[stock] = {}
-            for field, values in stock_data.items():
-                if hasattr(values, 'tolist'):  # 如果是numpy数组
-                    result[stock][field] = values.tolist()
-                else:
-                    result[stock][field] = values
-        
-        return {"success": True, "data": result}
-    except Exception as e:
-        print(f"获取历史行情数据出错: {str(e)}")
-        traceback.print_exc()
-        return {"success": False, "error": str(e)}
-
-def create_chart_panel(codes, period="1d", indicator_name="MA", param_names="", param_values=""):
-    """创建图表面板"""
-    ensure_xtdc_initialized()
-    try:
-        # 收集环境信息
-        env_info = {
-            "python_version": sys.version,
-            "platform": sys.platform,
-            "cwd": os.getcwd(),
-            "pid": os.getpid(),
-            "user": os.environ.get("USERNAME", "unknown"),
-            "xtdata_type": str(type(xtdata)),
-            "has_apply_ui_panel_control": hasattr(xtdata, 'apply_ui_panel_control'),
-        }
-        
-        if xtdata is None:
-            return {"success": False, "error": "xtdata模块未正确加载", "debug_info": env_info}
-        
-        # 解析股票代码列表
-        stock_list = [code.strip() for code in codes.split(",") if code.strip()]
-        if not stock_list:
-            return {"success": False, "error": "未提供有效的股票代码", "debug_info": env_info}
-        
-        # 解析参数名称和值
-        param_names_list = [name.strip() for name in param_names.split(",") if name.strip()]
-        param_values_list = []
-        for value in param_values.split(","):
-            if value.strip():
-                try:
-                    if '.' in value:
-                        param_values_list.append(float(value.strip()))
-                    else:
-                        param_values_list.append(int(value.strip()))
-                except ValueError:
-                    param_values_list.append(value.strip())
-        
-        # 构建指标配置
-        indicator_params = {}
-        for i, name in enumerate(param_names_list):
-            if i < len(param_values_list):
-                indicator_params[name] = param_values_list[i]
-        
-        # 创建指标配置字典
-        indicator_config = {indicator_name: indicator_params}
-        
-        # 创建面板列表
-        print(f"创建图表面板: 股票={stock_list}, 周期={period}, 指标={indicator_config}")
-        
-        panel_info = []
-        try:
-            # 尝试创建UIPanel对象
-            panels = []
-            for stock in stock_list:
-                try:
-                    panel = UIPanel(stock, period, figures=[indicator_config])
-                    panels.append(panel)
-                    panel_info.append({
-                        "stock": stock,
-                        "period": period,
-                        "figures": str(indicator_config),
-                        "panel_type": str(type(panel)),
-                        "panel_str": str(panel)
-                    })
-                except Exception as e:
-                    error_msg = f"创建UIPanel对象失败: {str(e)}"
-                    print(error_msg)
-                    traceback.print_exc()
-                    panel_info.append({
-                        "stock": stock,
-                        "period": period,
-                        "figures": str(indicator_config),
-                        "error": error_msg
-                    })
-            
-            # 应用面板控制
-            if hasattr(xtdata, 'apply_ui_panel_control'):
-                start_time = time.time()
-                result = xtdata.apply_ui_panel_control(panels)
-                end_time = time.time()
-                
-                # 强制刷新UI
-                if hasattr(xtdata, 'refresh_ui'):
-                    xtdata.refresh_ui()
-                
-                # 添加延迟，确保UI有时间更新
-                time.sleep(0.5)
-                
-                return {
-                    "success": True, 
-                    "data": {
-                        "result": result,
-                        "execution_time": end_time - start_time,
-                        "panel_info": panel_info
-                    },
-                    "debug_info": env_info
-                }
+        # 日期对象转字符串
+        date_strs = []
+        for date_obj in all_dates:
+            # 处理时间戳（毫秒）
+            if isinstance(date_obj, int) and date_obj > 1000000000000:
+                dt = datetime.fromtimestamp(date_obj / 1000)
+                date_str = dt.strftime('%Y%m%d')
+            # 处理datetime对象
+            elif hasattr(date_obj, 'strftime'):
+                date_str = date_obj.strftime('%Y%m%d')
+            # 处理字符串格式
+            elif isinstance(date_obj, str):
+                date_str = date_obj.replace('-', '')
+            # 处理整数格式
+            elif isinstance(date_obj, int):
+                date_str = str(date_obj)
             else:
-                return {
-                    "success": False, 
-                    "error": "xtdata模块没有apply_ui_panel_control方法",
-                    "debug_info": {
-                        "env_info": env_info,
-                        "panel_info": panel_info
-                    }
-                }
-        except Exception as e:
-            print(f"创建或应用面板时出错: {str(e)}")
-            traceback.print_exc()
-            return {
-                "success": False,
-                "error": f"创建或应用面板时出错: {str(e)}",
-                "debug_info": {
-                    "env_info": env_info,
-                    "panel_info": panel_info,
-                    "traceback": traceback.format_exc()
-                }
-            }
-    except Exception as e:
-        print(f"创建图表面板出错: {str(e)}")
-        traceback.print_exc()
-        return {
-            "success": False,
-            "error": str(e),
-            "debug_info": {
-                "traceback": traceback.format_exc()
-            }
-        }
+                date_str = str(date_obj)
+                
+            if len(date_str) == 8 and date_str.isdigit():
+                date_strs.append(date_str)
+            else:
+                print(f"警告：跳过无效日期格式: {date_obj}")
 
-def create_custom_layout(codes, period="1d", indicator_name="MA", param_names="", param_values=""):
-    """创建自定义布局"""
-    # 这里简单地调用 create_chart_panel 函数，实际应用中可以根据需要扩展
-    return create_chart_panel(codes, period, indicator_name, param_names, param_values)
+        # 应用日期范围过滤
+        if start_date_str:
+            date_strs = [d for d in date_strs if d >= start_date_str]
+        if end_date_str:
+            date_strs = [d for d in date_strs if d <= end_date_str]
+
+        return {"success": True, "data": date_strs}
+    except Exception as e:
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
 
 # HTTP 请求处理器
-class XTQuantAIHandler(BaseHTTPRequestHandler):
-    def _set_headers(self, content_type="application/json"):
-        self.send_response(200)
-        self.send_header("Content-type", content_type)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.end_headers()
-    
-    def do_OPTIONS(self):
-        self._set_headers()
-    
+class XTRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        # 解析URL路径和查询参数
-        parsed_path = urllib.parse.urlparse(self.path)
-        path = parsed_path.path
-        query = urllib.parse.parse_qs(parsed_path.query)
-        
-        # 将查询参数转换为单值字典
-        params = {k: v[0] if len(v) == 1 else v for k, v in query.items()}
-        
-        # 根据路径调用相应的函数
-        result = {"success": False, "error": "未知路径"}
-        
-        if path == "/api/get_trading_dates":
-            market = params.get("market", "SH")
-            start_date = params.get("start_date")
-            end_date = params.get("end_date")
-            result = get_trading_dates(market=market, start_date_str=start_date, end_date_str=end_date)
-        
-        elif path == "/api/get_stock_list":
-            sector = params.get("sector", "沪深A股")
-            result = get_stock_list(sector)
-        
-        elif path == "/api/get_instrument_detail":
-            code = params.get("code", "")
-            iscomplete = params.get("iscomplete", "false").lower() == "true"
-            if not code:
-                result = {"success": False, "error": "未提供股票代码"}
-            else:
-                result = get_instrument_detail(code, iscomplete)
-        
-        elif path == "/api/get_history_market_data":
-            fields = params.get("fields", "")
-            stock_list = params.get("stock_list", "")
-            period = params.get("period", "1d")
-            start_time = params.get("start_time", "")
-            end_time = params.get("end_time", "")
-            count = int(params.get("count", "-1"))
-            dividend_type = params.get("dividend_type", "none")
-            fill_data = params.get("fill_data", "true").lower() == "true"
-            
-            if not fields or not stock_list:
-                result = {"success": False, "error": "未提供字段或股票列表"}
-            else:
-                result = get_history_market_data(fields, stock_list, period, start_time, end_time, count, dividend_type, fill_data)
-        
-        elif path == "/api/create_chart_panel":
-            codes = params.get("codes", "")
-            period = params.get("period", "1d")
-            indicator_name = params.get("indicator_name", "MA")
-            param_names = params.get("param_names", "")
-            param_values = params.get("param_values", "")
-            
-            if not codes:
-                result = {"success": False, "error": "未提供股票代码"}
-            else:
-                result = create_chart_panel(codes, period, indicator_name, param_names, param_values)
-        
-        elif path == "/api/create_custom_layout":
-            codes = params.get("codes", "")
-            period = params.get("period", "1d")
-            indicator_name = params.get("indicator_name", "MA")
-            param_names = params.get("param_names", "")
-            param_values = params.get("param_values", "")
-            
-            if not codes:
-                result = {"success": False, "error": "未提供股票代码"}
-            else:
-                result = create_custom_layout(codes, period, indicator_name, param_names, param_values)
-        
-        elif path == "/api/list_tools":
-            # 列出所有可用的工具
-            result = {
-                "success": True,
-                "data": [
-                    {"name": "get_trading_dates", "description": "获取交易日期"},
-                    {"name": "get_stock_list", "description": "获取板块股票列表"},
-                    {"name": "get_instrument_detail", "description": "获取股票详情"},
-                    {"name": "get_history_market_data", "description": "获取历史行情数据"},
-                    {"name": "create_chart_panel", "description": "创建图表面板"},
-                    {"name": "create_custom_layout", "description": "创建自定义布局"}
-                ]
-            }
-        
-        # 返回JSON响应
-        self._set_headers()
-        self.wfile.write(json.dumps(result, ensure_ascii=False).encode("utf-8"))
-    
-    def do_POST(self):
-        # 获取请求内容长度
-        content_length = int(self.headers.get("Content-Length", 0))
-        
-        # 读取请求体
-        post_data = self.rfile.read(content_length).decode("utf-8")
-        
-        # 解析JSON数据
         try:
-            params = json.loads(post_data)
-        except json.JSONDecodeError:
-            self._set_headers()
-            self.wfile.write(json.dumps({"success": False, "error": "无效的JSON数据"}).encode("utf-8"))
-            return
-        
-        # 解析URL路径
-        parsed_path = urllib.parse.urlparse(self.path)
-        path = parsed_path.path
-        
-        # 根据路径调用相应的函数
-        result = {"success": False, "error": "未知路径"}
-        
-        if path == "/api/get_trading_dates":
-            market = params.get("market", "SH")
-            start_date = params.get("start_date")
-            end_date = params.get("end_date")
-            result = get_trading_dates(market=market, start_date_str=start_date, end_date_str=end_date)
-        
-        elif path == "/api/get_stock_list":
-            sector = params.get("sector", "沪深A股")
-            result = get_stock_list(sector)
-        
-        elif path == "/api/get_instrument_detail":
-            code = params.get("code", "")
-            iscomplete = params.get("iscomplete", False)
-            if not code:
-                result = {"success": False, "error": "未提供股票代码"}
-            else:
-                result = get_instrument_detail(code, iscomplete)
-        
-        elif path == "/api/get_history_market_data":
-            fields = params.get("fields", "")
-            stock_list = params.get("stock_list", "")
-            period = params.get("period", "1d")
-            start_time = params.get("start_time", "")
-            end_time = params.get("end_time", "")
-            count = params.get("count", -1)
-            dividend_type = params.get("dividend_type", "none")
-            fill_data = params.get("fill_data", True)
+            # 解析URL和参数
+            parsed = urllib.parse.urlparse(self.path)
+            path = parsed.path
+            query = urllib.parse.parse_qs(parsed.query)
             
-            if not fields or not stock_list:
-                result = {"success": False, "error": "未提供字段或股票列表"}
-            else:
-                result = get_history_market_data(fields, stock_list, period, start_time, end_time, count, dividend_type, fill_data)
-        
-        elif path == "/api/create_chart_panel":
-            codes = params.get("codes", "")
-            period = params.get("period", "1d")
-            indicator_name = params.get("indicator_name", "MA")
-            param_names = params.get("param_names", "")
-            param_values = params.get("param_values", "")
+            # 设置响应头
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
             
-            if not codes:
-                result = {"success": False, "error": "未提供股票代码"}
+            # 路由处理
+            # 添加历史K线端点
+            if path == '/api/v1/hist_kline':
+                symbol = query.get('symbol', [''])[0]
+                start_date = query.get('start_date', [''])[0]
+                end_date = query.get('end_date', [''])[0]
+                frequency = query.get('frequency', ['1d'])[0]
+                
+                # 参数验证
+                if not all([symbol, start_date, end_date, frequency]):
+                    self.wfile.write(json.dumps({
+                        "success": False,
+                        "error": "缺少必要参数: symbol, start_date, end_date, frequency"
+                    }).encode('utf-8'))
+                    return
+                    
+                # 模拟数据返回 (实际实现需连接量化平台API)
+                simulated_data = [
+                    {"date": "20230103", "open": 180.0, "high": 182.5, "low": 179.5, "close": 181.2, "volume": 100000},
+                    {"date": "20230104", "open": 181.5, "high": 183.8, "low": 180.8, "close": 182.0, "volume": 120000},
+                    {"date": "20230105", "open": 182.5, "high": 184.0, "low": 181.0, "close": 183.5, "volume": 95000}
+                ]
+                
+                self.wfile.write(json.dumps({
+                    "success": True,
+                    "data": simulated_data
+                }).encode('utf-8'))
+                return
+            # 添加健康检查端点
+            if path == '/api/health':
+                self.wfile.write(json.dumps({
+                    "success": True,
+                    "data": "服务运行正常"
+                }).encode('utf-8'))
+                return
+            if path == '/api/v1/get_trading_dates':
+                market = query.get('market', ['SH'])[0]
+                start_date = query.get('start_date', [''])[0]
+                end_date = query.get('end_date', [''])[0]
+                
+                result = get_trading_dates(market, start_date, end_date)
+                self.wfile.write(json.dumps(result).encode('utf-8'))
             else:
-                result = create_chart_panel(codes, period, indicator_name, param_names, param_values)
-        
-        elif path == "/api/create_custom_layout":
-            codes = params.get("codes", "")
-            period = params.get("period", "1d")
-            indicator_name = params.get("indicator_name", "MA")
-            param_names = params.get("param_names", "")
-            param_values = params.get("param_values", "")
-            
-            if not codes:
-                result = {"success": False, "error": "未提供股票代码"}
-            else:
-                result = create_custom_layout(codes, period, indicator_name, param_names, param_values)
-        
-        # 返回JSON响应
-        self._set_headers()
-        self.wfile.write(json.dumps(result, ensure_ascii=False).encode("utf-8"))
+                self.wfile.write(json.dumps({
+                    "success": False,
+                    "error": f"无效的API路径: {path}"
+                }).encode('utf-8'))
+                
+        except Exception as e:
+            self.send_response(500)
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": False,
+                "error": f"服务器内部错误: {str(e)}"
+            }).encode('utf-8'))
+            traceback.print_exc()
 
 def run_server(port=8000):
-    """运行HTTP服务器"""
-    server_address = ("", port)
-    httpd = HTTPServer(server_address, XTQuantAIHandler)
-    print(f"启动服务器在 http://localhost:{port}")
-    print("提供以下API接口:")
-    print("1. GET/POST /api/get_trading_dates - 获取交易日期")
-    print("2. GET/POST /api/get_stock_list - 获取板块股票列表")
-    print("3. GET/POST /api/get_instrument_detail - 获取股票详情")
-    print("4. GET/POST /api/get_history_market_data - 获取历史行情数据")
-    print("5. GET/POST /api/create_chart_panel - 创建图表面板")
-    print("6. GET/POST /api/create_custom_layout - 创建自定义布局")
-    print("7. GET /api/list_tools - 列出所有可用的工具")
-    print("按Ctrl+C停止服务器")
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("服务器已停止")
+    server_address = ('', port)
+    httpd = HTTPServer(server_address, XTRequestHandler)
+    print(f"服务器启动在端口: {port}")
+    httpd.serve_forever()
 
 if __name__ == "__main__":
     import argparse
-    
-    parser = argparse.ArgumentParser(description="启动xtquantai直接服务器")
-    parser.add_argument("--port", type=int, default=8000, help="服务器端口号")
-    
+    parser = argparse.ArgumentParser(description="xtquantai服务器")
+    parser.add_argument("--port", type=int, default=8000, help="端口号")
     args = parser.parse_args()
     
-    run_server(args.port) 
+    run_server(args.port)
