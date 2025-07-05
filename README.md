@@ -60,85 +60,54 @@
     git clone https://github.com/jiaenyue/project-argus-qmt-agent.git
     cd project-argus-qmt-agent
     ```
-    或者直接下载 `qmt_data_agent.py` (或其他主要脚本文件)。
-
-2.  **Python 环境：**
-    建议使用虚拟环境：
-    ```bash
-    python -m venv .venv
-    # 激活虚拟环境
-    # Windows CMD:
-    # .venv\Scripts\activate.bat
-    # Windows PowerShell:
-    # .\.venv\Scripts\Activate.ps1
-    ```
-
-3.  **依赖安装 (如果除了标准库和`xtquant`外还有其他依赖):**
-    如果本项目有 `requirements.txt` 文件：
-    ```bash
-    pip install -r requirements.txt
-    ```
-    (当前版本的 `qmt_data_agent.py` 主要依赖Python标准库和`xtquant`)
-
-4.  **配置端口 (可选):**
-    本代理服务监听的端口可以通过环境变量 `QMT_DATA_AGENT_PORT` 进行配置。如果未设置，默认为 `8000`。
-    ```bash
-    # Windows CMD
-    set QMT_DATA_AGENT_PORT=8001
-    # Windows PowerShell
-    $env:QMT_DATA_AGENT_PORT="8001"
-    ```
+2.  **详细安装与配置步骤:**
+    请参阅 [安装指南 (INSTALL.md)](INSTALL.md) 获取详细的设置说明，包括：
+    *   设置 Python 环境 (Python 3.11+)。
+    *   创建 Python 虚拟环境 (例如 `qmt_env`)。
+    *   从 `pyproject.toml` 安装依赖 (使用 `pip install .`)。
+    *   验证 `xtquant` 的可访问性。
+    *   （可选）为 `server_direct.py` (旧版回退服务) 配置端口环境变量 `QMT_DATA_AGENT_PORT`。
 
 ## 运行代理服务
 
-1.  **确保 miniQMT 客户端已登录并正常运行。**
-2.  **详细安装与配置:**
-    Please refer to the [Installation Guide (INSTALL.md)](INSTALL.md) for detailed setup instructions, including:
-    *   Setting up the Python environment (Python 3.11+).
-    *   Creating a virtual environment (e.g., `qmt_env`).
-    *   Installing dependencies from `pyproject.toml` (using `pip install .`).
-    *   Verifying `xtquant` accessibility.
+按照 [安装指南 (INSTALL.md)](INSTALL.md) 中的说明安装和配置完成后，您可以使用项目根目录下的 `main.py` 脚本来运行服务。
 
-## 运行代理服务
-
-Once installed and configured as per [INSTALL.md](INSTALL.md), you can run the server using the `main.py` script located in the project root.
-
-1.  **Ensure miniQMT 客户端已登录并正常运行 (if using live data).**
-2.  **Activate your Python virtual environment (e.g., `qmt_env`).**
-3.  **Navigate to the project root directory and run:**
+1.  **确保 miniQMT 客户端已登录并正常运行 (如果使用实时数据)。**
+2.  **激活您的 Python 虚拟环境 (例如 `qmt_env`)。**
+3.  **导航到项目根目录并运行：**
     ```bash
     python main.py
     ```
-    This will start the server in automatic mode (tries MCP Inspector first, then falls back to direct mode). You can also specify modes:
-    *   `python main.py --mode direct`
-    *   `python main.py --mode inspector` (requires Node.js and npx)
+    这将以自动模式启动服务（首先尝试 MCP Inspector，然后回退到直接模式）。您也可以指定模式：
+    *   `python main.py --mode direct` (直接模式)
+    *   `python main.py --mode inspector` (MCP Inspector 模式，需要 Node.js 和 npx)
 
-    You should see server startup log messages.
+    您应该能看到服务启动的日志信息。
 
 4.  **日志文件:**
-    The server primarily logs to the console. The older `server_direct.py` (used as a fallback) might create `qmt_data_agent.log`, but the main MCP server logs to standard output. For detailed logging configuration, especially in an MCP context, refer to MCP documentation or server output.
-    The original project's logging discussion can be found in [系统设计文档中的“日志记录和监控”部分 (`doc/system_design.md#5-日志记录和监控`)](doc/system_design.md#5-日志记录和监控).
+    服务主要将日志输出到控制台。旧版的 `server_direct.py` (作为回退使用时) 可能会创建 `qmt_data_agent.log` 文件，但主要的 MCP 服务 (`src/xtquantai/server.py`) 会将日志记录到标准输出。有关详细的日志配置 (尤其是在 MCP 环境中)，请参阅 MCP 相关文档或服务输出信息。
+    原始项目关于日志的讨论可以在 [系统设计文档中的“日志记录和监控”部分 (`doc/system_design.md#5-日志记录和监控`)](doc/system_design.md#5-日志记录和监控) 找到。
 
 ## 持久化运行 (作为 Windows 服务 - 推荐)
 
-To run the agent persistently as a Windows service, you can use `NSSM`. Refer to the [Installation Guide (INSTALL.md)](INSTALL.md) for general setup, then adapt the NSSM configuration:
+要将代理作为 Windows 服务持久运行，您可以使用 `NSSM`。请首先参照 [安装指南 (INSTALL.md)](INSTALL.md) 完成基本安装步骤，然后按以下方式配置 NSSM：
 
-1.  **Download NSSM:** From [NSSM 官网](https://nssm.cc/download).
-2.  **Install Service (Example):**
-    *   Place `nssm.exe` in a suitable directory (e.g., `C:\NSSM\`).
-    *   Open command prompt as Administrator.
-    *   Run `C:\NSSM\nssm.exe install ProjectArgusQMTDataAgent`
-    *   In the NSSM GUI:
-        *   **Path:** Path to your Python interpreter within your virtual environment (e.g., `C:\project-argus-qmt-agent\qmt_env\Scripts\python.exe`).
-        *   **Startup directory:** The root directory of this project (e.g., `C:\project-argus-qmt-agent\`).
-        *   **Arguments:** `main.py` (or `main.py --mode direct` if you prefer a specific mode).
-        *   **Environment Tab (Optional):** Set `QMT_DATA_AGENT_PORT` if `server_direct.py` is used as a fallback and you need a specific port for it.
-    *   Click "Install service".
-3.  **Start Service:**
+1.  **下载 NSSM:** 从 [NSSM 官网](https://nssm.cc/download) 下载。
+2.  **安装服务 (示例):**
+    *   将 `nssm.exe` 放置在一个合适的目录 (例如 `C:\NSSM\`)。
+    *   以管理员身份打开命令提示符。
+    *   运行 `C:\NSSM\nssm.exe install ProjectArgusQMTDataAgent`
+    *   在 NSSM 图形用户界面中：
+        *   **Path (路径):** 指向您虚拟环境中的 Python 解释器路径 (例如 `C:\project-argus-qmt-agent\qmt_env\Scripts\python.exe`)。
+        *   **Startup directory (启动目录):** 本项目的根目录 (例如 `C:\project-argus-qmt-agent\`)。
+        *   **Arguments (参数):** `main.py` (如果您希望指定特定模式，可以是 `main.py --mode direct`)。
+        *   **Environment Tab (环境变量页，可选):** 如果 `server_direct.py` 作为回退机制被使用，且您需要为其指定特定端口，则可设置 `QMT_DATA_AGENT_PORT`。
+    *   点击 "Install service" (安装服务)。
+3.  **启动服务:**
     ```bash
     C:\NSSM\nssm.exe start ProjectArgusQMTDataAgent
     ```
-    Or use Windows Services Manager (`services.msc`).
+    或者通过 Windows 服务管理器 (`services.msc`) 启动。
 
 ## API 接口说明
 
