@@ -1,4 +1,8 @@
-fastapi
-uvicorn[standard]
-httpx # Required by TestClient
-xtquant # Added for xtdata functionality
+  
+  
+fastapi  
+uvicorn[standard]  
+httpx # Required by TestClient  
+xtquant # Added for xtdata functionality  
+
+chardet

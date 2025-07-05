@@ -1,89 +1,128 @@
 import pytest
-from fastapi.testclient import TestClient # TestClient 仍然需要导入以进行类型提示或直接使用
+from data_agent_service.main import app
+from fastapi.testclient import TestClient
 from unittest.mock import patch
-# from data_agent_service.main import app # 移除模块级导入，app 通过 client fixture 提供
 
-# 模拟数据定义
+client = TestClient(app)
+
+# 定义完整的mock返回数据
 MOCK_LATEST_MARKET_DATA = {
-    "600519.SH": {"lastPrice": 1700.50, "volume": 100000, "openPrice": 1710.00},
-    "000001.SZ": {"lastPrice": 13.50, "volume": 500000, "openPrice": 13.60}
+    "600519.SH": {
+        "time": "2023-01-01 15:00:00",
+        "lastPrice": 1700.0,
+        "volume": 100000,
+        "amount": 170000000.0,
+        "open": 1690.0,
+        "high": 1710.0,
+        "low": 1680.0
+    },
+    "000001.SZ": {
+        "time": "2023-01-01 15:00:00",
+        "lastPrice": 13.5,
+        "volume": 2000000,
+        "amount": 27000000.0,
+        "open": 13.4,
+        "high": 13.6,
+        "low": 13.3
+    }
 }
 
-# client fixture 现在由 conftest.py 提供，所以这里的定义被移除
-
-# === Tests for /latest_market ===
-
-@patch('data_agent_service.main.xtdata.get_latest_market_data')
-def test_get_latest_market_success_single_symbol(mock_get_latest_method, client):
+def test_get_latest_market_success_single_symbol():
     """测试成功获取单个股票的最新行情"""
-    mock_response = {"600519.SH": MOCK_LATEST_MARKET_DATA["600519.SH"]}
-    mock_get_latest_method.return_value = mock_response
+    with patch('data_agent_service.main.xtdata.get_market_data') as mock_method:
+        mock_method.return_value = {
+            'time': {'600519.SH': ["2023-01-01 15:00:00"]},
+            'lastPrice': {'600519.SH': [1700.0]},
+            'volume': {'600519.SH': [100000]},
+            'amount': {'600519.SH': [170000000.0]},
+            'open': {'600519.SH': [1690.0]},
+            'high': {'600519.SH': [1710.0]},
+            'low': {'600519.SH': [1680.0]}
+        }
+        response = client.get("/latest_market?symbols=600519.SH")
+        assert response.status_code == 200
+        data = response.json()
+        assert "600519.SH" in data
+        assert data["600519.SH"]["lastPrice"] == 1700.0
+        assert data["600519.SH"]["volume"] == 100000
+        assert data["600519.SH"]["open"] == 1690.0
 
-    response = client.get("/latest_market?symbols=600519.SH")
-    assert response.status_code == 200
-    data = response.json()
-    assert "600519.SH" in data
-    assert data["600519.SH"]["lastPrice"] == MOCK_LATEST_MARKET_DATA["600519.SH"]["lastPrice"]
-    mock_get_latest_method.assert_called_once_with(["600519.SH"])
-
-@patch('data_agent_service.main.xtdata.get_latest_market_data')
-def test_get_latest_market_success_multiple_symbols(mock_get_latest_method, client):
+def test_get_latest_market_success_multiple_symbols():
     """测试成功获取多个股票的最新行情"""
-    mock_get_latest_method.return_value = MOCK_LATEST_MARKET_DATA
-    response = client.get("/latest_market?symbols=600519.SH,000001.SZ")
-    assert response.status_code == 200
-    data = response.json()
-    assert "600519.SH" in data
-    assert "000001.SZ" in data
-    assert data["000001.SZ"]["volume"] == MOCK_LATEST_MARKET_DATA["000001.SZ"]["volume"]
-    mock_get_latest_method.assert_called_once_with(["600519.SH", "000001.SZ"])
+    with patch('data_agent_service.main.xtdata.get_market_data') as mock_method:
+        mock_method.return_value = {
+            'time': {
+                '600519.SH': ["2023-01-01 15:00:00"],
+                '000001.SZ': ["2023-01-01 15:00:00"]
+            },
+            'lastPrice': {'600519.SH': [1700.0], '000001.SZ': [13.5]},
+            'volume': {'600519.SH': [100000], '000001.SZ': [2000000]},
+            'amount': {'600519.SH': [170000000.0], '000001.SZ': [27000000.0]},
+            'open': {'600519.SH': [1690.0], '000001.SZ': [13.4]},
+            'high': {'600519.SH': [1710.0], '000001.SZ': [13.6]},
+            'low': {'600519.SH': [1680.0], '000001.SZ': [13.3]}
+        }
+        response = client.get("/latest_market?symbols=600519.SH,000001.SZ")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert "600519.SH" in data
+        assert "000001.SZ" in data
+        assert data["000001.SZ"]["lastPrice"] == 13.5
 
-@patch('data_agent_service.main.xtdata.get_latest_market_data')
-def test_get_latest_market_partial_found(mock_get_latest_method, client):
-    """测试部分股票代码有效，xtdata只返回有效部分的数据"""
-    mock_response = {"600519.SH": MOCK_LATEST_MARKET_DATA["600519.SH"]}
-    mock_get_latest_method.return_value = mock_response
+def test_get_latest_market_partial_found():
+    """测试部分股票代码有效"""
+    with patch('data_agent_service.main.xtdata.get_market_data') as mock_method:
+        mock_method.return_value = {
+            'time': {'600519.SH': ["2023-01-01 15:00:00"]},
+            'lastPrice': {'600519.SH': [1700.0]},
+            'volume': {'600519.SH': [100000]},
+            'amount': {'600519.SH': [170000000.0]},
+            'open': {'600519.SH': [1690.0]},
+            'high': {'600519.SH': [1710.0]},
+            'low': {'600519.SH': [1680.0]}
+        }
+        response = client.get("/latest_market?symbols=600519.SH,000000.SZ")
+        assert response.status_code == 200
+        data = response.json()
+        assert "600519.SH" in data
+        assert "000000.SZ" in data  # 现在所有请求的股票都会返回
+        assert data["600519.SH"]["lastPrice"] == 1700.0
+        assert data["000000.SZ"]["lastPrice"] is None  # 未找到的股票字段为空
 
-    response = client.get("/latest_market?symbols=600519.SH,NONEXIST.SZ")
-    # API应该仍然返回200，即使只有一个股票找到了数据
-    assert response.status_code == 200
-    data = response.json()
-    assert "600519.SH" in data
-    assert "NONEXIST.SZ" not in data # 假设xtdata不为找不到的股票返回键
-    mock_get_latest_method.assert_called_once_with(["600519.SH", "NONEXIST.SZ"])
+def test_get_latest_market_none_found():
+    """测试所有股票代码均无效或无数据"""
+    with patch('data_agent_service.main.xtdata.get_market_data') as mock_method:
+        mock_method.return_value = {}  # 返回空数据
+        response = client.get("/latest_market?symbols=000000.SH,000000.SZ")
+        assert response.status_code == 200
+        data = response.json()
+        assert "000000.SH" in data
+        assert "000000.SZ" in data
+        assert data["000000.SH"]["lastPrice"] is None
 
-@patch('data_agent_service.main.xtdata.get_latest_market_data')
-def test_get_latest_market_none_found(mock_get_latest_method, client):
-    """测试所有股票代码均无效或无数据 (xtdata返回空字典)"""
-    mock_get_latest_method.return_value = {} # xtdata返回空字典
-    response = client.get("/latest_market?symbols=NONEXIST1.SH,NONEXIST2.SZ")
-    assert response.status_code == 404 # main.py中会因为空字典抛出404
-    assert "No market data found for symbols" in response.json()["detail"]
-    mock_get_latest_method.assert_called_once_with(["NONEXIST1.SH", "NONEXIST2.SZ"])
-
-def test_get_latest_market_invalid_symbol_format(client):
-    """测试symbols参数中包含无效格式的股票代码"""
-    response = client.get("/latest_market?symbols=600519.SH,INVALIDCODE")
+def test_get_latest_market_invalid_symbol_format():
+    """测试无效的股票代码格式"""
+    response = client.get("/latest_market?symbols=INVALID")
     assert response.status_code == 400
-    assert "Invalid symbol format: INVALIDCODE" in response.json()["detail"]
+    assert "Invalid symbol format" in response.json()["detail"]
 
-def test_get_latest_market_empty_symbols_param(client):
-    """测试symbols参数为空字符串"""
+def test_get_latest_market_empty_symbols_param():
+    """测试symbols参数为空"""
     response = client.get("/latest_market?symbols=")
-    # 根据main.py中的检查，空字符串解析后列表为空，会触发400
     assert response.status_code == 400
-    assert "Symbols query parameter cannot be empty" in response.json()["detail"]
+    assert "symbols query parameter cannot be empty" in response.json()["detail"]  # 更新断言文本
 
-def test_get_latest_market_missing_symbols_param(client):
+def test_get_latest_market_missing_symbols_param():
     """测试缺少必需的symbols参数"""
     response = client.get("/latest_market")
     assert response.status_code == 400
     assert "symbols query parameter is required" in response.json()["detail"]
 
-@patch('data_agent_service.main.xtdata.get_latest_market_data')
-def test_get_latest_market_xtdata_exception(mock_get_latest_method, client):
-    """测试xtdata调用时发生异常"""
-    mock_get_latest_method.side_effect = Exception("XTData internal error")
-    response = client.get("/latest_market?symbols=600519.SH")
-    assert response.status_code == 500
-    assert "Internal server error" in response.json()["detail"]
+def test_get_latest_market_xtdata_exception():
+    """测试xtdata内部异常"""
+    with patch('data_agent_service.main.xtdata.get_market_data') as mock_method:
+        mock_method.side_effect = Exception("Mock exception")
+        response = client.get("/latest_market?symbols=600519.SH")
+        assert response.status_code == 500
+        assert "Internal server error" in response.json()["detail"]

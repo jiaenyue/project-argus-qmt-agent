@@ -1,164 +1,175 @@
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from typing import Optional, Dict, Any, List
-import re
-from xtquant import xtdata # 添加导入
+  
+from fastapi import FastAPI, HTTPException, Query, Request  
+from fastapi.exceptions import RequestValidationError  
+from pydantic import BaseModel  
+from typing import Optional, Dict, Any, List  
+import re  
+from xtquant import xtdata  
+import logging  
+import traceback  
+import numpy as np  
 
-app = FastAPI()
+# 配置日志记录器  
+logger = logging.getLogger(__name__)  
+logger.setLevel(logging.INFO)  
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')  
+ch = logging.StreamHandler()  
+ch.setFormatter(formatter)  
+logger.addHandler(ch)  
 
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    # 处理参数验证错误
-    # errors = []
-    # for error in exc.errors():
-    #     param_name = error["loc"][-1] # 获取参数名
-    #     errors.append(f"{param_name} query parameter is required")
+app = FastAPI()  
 
-    # if errors:
-    #     return JSONResponse(
-    #         status_code=400,
-    #         content={"detail": "; ".join(errors)},
-    #     )
-    # 返回原始的FastAPI验证错误以获取更详细的信息
-    from fastapi.exception_handlers import request_validation_exception_handler
-    return await request_validation_exception_handler(request, exc)
+# 统一响应格式装饰器  
+def unified_response(func):  
+    async def wrapper(*args, **kwargs):  
+        try:  
+            result = await func(*args, **kwargs)  
+            return {"success": True, "data": result}  
+        except HTTPException as e:  
+            return {"success": False, "error": e.detail, "code": e.status_code}  
+        except Exception as e:  
+            logger.error(f"API error: {str(e)}", exc_info=True)  
+            return {"success": False, "error": str(e), "code": 500}  
+    return wrapper  
 
-@app.get("/")
-async def read_root():
-    return {"message": "Welcome to Data Agent Service"}
+@app.get("/")  
+@unified_response  
+async def read_root():  
+    return {"message": "Welcome to Data Agent Service"}  
 
-class InstrumentDetailResponse(BaseModel):
-    symbol: str
-    displayName: str
-    lastPrice: float
-    openPrice: float
-    highPrice: float
-    lowPrice: float
-    closePrice: float
-    volume: int
-    amount: float
-    timestamp: str
+@app.get("/instrument_detail")  
+@unified_response  
+async def get_instrument_detail(symbol: str = Query(..., min_length=1)):  
+    upper_symbol = symbol.upper()  
+    if not re.match(r'^[A-Z0-9]{6}\.[A-Z]{2}$', upper_symbol):  
+        raise HTTPException(status_code=400, detail="Invalid symbol format. Expected format like '600519.SH' or '000001.SZ'.")  
+    
+    detail = xtdata.get_instrument_detail(upper_symbol)  
+    
+    if detail is None or detail == {}:  
+        raise HTTPException(status_code=404, detail=f"Instrument not found: {symbol}")  
+    
+    # 获取最新行情数据  
+    market_data = xtdata.get_market_data(  
+        field_list=['lastPrice', 'open', 'high', 'low', 'volume', 'amount', 'time'],  
+        stock_list=[upper_symbol],  
+        period='tick',  
+        count=1  
+    )  
+    
+    return {  
+        "symbol": detail.get("InstrumentID", symbol),  
+        "displayName": detail.get("InstrumentName", ""),  
+        "lastPrice": market_data.get('lastPrice', {}).get(upper_symbol, [None])[0],  
+        "openPrice": market_data.get('open', {}).get(upper_symbol, [None])[0],  
+        "highPrice": market_data.get('high', {}).get(upper_symbol, [None])[0],  
+        "lowPrice": market_data.get('low', {}).get(upper_symbol, [None])[0],  
+        "closePrice": market_data.get('lastPrice', {}).get(upper_symbol, [None])[0],  
+        "volume": market_data.get('volume', {}).get(upper_symbol, [None])[0],  
+        "amount": market_data.get('amount', {}).get(upper_symbol, [None])[0],  
+        "timestamp": market_data.get('time', {}).get(upper_symbol, [None])[0]  
+    }  
 
-@app.get("/instrument_detail")
-async def get_instrument_detail(symbol: str = Query(..., min_length=1)):
-    try:
-        # 验证symbol格式
-        if not re.match(r'^[A-Z0-9]{6}\.[A-Z]{2}$', symbol.upper()): # 转换为大写以匹配常见格式
-            raise HTTPException(status_code=400, detail="Invalid symbol format. Expected format like '600519.SH' or '000001.SZ'.")
-        
-        # 初始化xtdata（如果尚未初始化）
-        # xtdata.init() # 实际项目中根据需要进行初始化管理
+@app.get("/stock_list")  
+@unified_response  
+async def get_stock_list_insector(sector: str = Query(..., min_length=1, description="Sector name, e.g., '沪深A股'")):  
+    stock_list = xtdata.get_stock_list_in_sector(sector)  
+    return stock_list or []  
 
-        detail = xtdata.get_instrument_detail(symbol.upper()) # 使用xtquant.xtdata
-        
-        if detail is None or not isinstance(detail, dict) or not detail: # xtquant可能返回None或空字典
-            raise HTTPException(status_code=404, detail=f"Instrument not found or no data available for: {symbol}")
-        
-        # Pydantic模型验证（如果启用了response_model）会处理字段缺失/类型错误
-        # 这里可以直接返回detail，FastAPI会尝试匹配InstrumentDetailResponse
-        return detail
-    except HTTPException:
-        # 直接重新抛出HTTPException，让FastAPI处理
-        raise
-    except Exception as e:
-        # 记录异常信息到日志会更好
-        # print(f"Error in get_instrument_detail: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error while fetching instrument detail for: {symbol}")
+@app.get("/latest_market")  
+@unified_response  
+async def get_latest_market_data(symbols: str = Query(..., description="Comma-separated list of stock symbols, e.g., '600519.SH,000001.SZ'")):  
+    symbol_list = [s.strip().upper() for s in symbols.split(',') if s.strip()]  
+    if not symbol_list:  
+        raise HTTPException(status_code=400, detail="symbols query parameter cannot be empty")  
+    
+    # 验证股票代码格式  
+    invalid_symbols = [s for s in symbol_list if not re.match(r'^[A-Z0-9]{6}\.[A-Z]{2}$', s)]  
+    if invalid_symbols:  
+        raise HTTPException(  
+            status_code=400,  
+            detail=f"Invalid symbol format: {', '.join(invalid_symbols)}"  
+        )  
+    
+    # 获取最新市场数据  
+    market_data = xtdata.get_market_data(  
+        field_list=['lastPrice', 'open', 'high', 'low', 'volume', 'amount', 'time'],  
+        stock_list=symbol_list,  
+        period='tick',  
+        count=1  
+    )  
+    
+    # 构建响应对象  
+    result = {}  
+    for symbol in symbol_list:  
+        result[symbol] = {  
+            "time": market_data.get('time', {}).get(symbol, [None])[0],  
+            "lastPrice": market_data.get('lastPrice', {}).get(symbol, [None])[0],  
+            "volume": market_data.get('volume', {}).get(symbol, [None])[0],  
+            "amount": market_data.get('amount', {}).get(symbol, [None])[0],  
+            "open": market_data.get('open', {}).get(symbol, [None])[0],  
+            "high": market_data.get('high', {}).get(symbol, [None])[0],  
+            "low": market_data.get('low', {}).get(symbol, [None])[0]  
+        }  
+    
+    return result  
 
-@app.get("/stock_list", response_model=List[str])
-async def get_stock_list_in_sector(sector: str = Query(..., min_length=1, description="Sector name, e.g., '沪深A股'")):
-    try:
-        # 初始化xtdata（如果尚未初始化）
-        # xtdata.init() # 实际项目中根据需要进行初始化管理
+@app.get("/full_market")  
+@unified_response  
+async def get_full_market_data_endpoint(  
+    symbol: str = Query(..., description="Stock symbol, e.g., '600519.SH'"),  
+    fields: Optional[str] = Query(None, description="Comma-separated list of fields, e.g., 'open,high,low,close,volume'")  
+):  
+    upper_symbol = symbol.strip().upper()  
+    if not re.match(r'^[A-Z0-9]{6}\.[A-Z]{2}$', upper_symbol):  
+        raise HTTPException(status_code=400, detail=f"Invalid symbol format: {symbol}")  
+    
+    # 处理字段参数  
+    field_list = []  
+    if fields:  
+        field_list = [f.strip() for f in fields.split(',') if f.strip()]  
+        if not field_list:  
+            raise HTTPException(status_code=400, detail="Fields parameter, if provided, cannot be empty or only commas")  
+    
+    if not field_list:  
+        field_list = ["open", "high", "low", "close", "volume"]  
+    
+    # 获取完整行情数据  
+    market_data = xtdata.get_full_market_data(field_list, [upper_symbol], period='1d')  
+    
+    if not market_data or upper_symbol not in market_data:  
+        raise HTTPException(status_code=404, detail="Data not found")  
+    
+    # 直接返回字段对象  
+    result = {}  
+    for field in field_list:  
+        if field in market_data[upper_symbol]:  
+            value = market_data[upper_symbol][field]  
+            if isinstance(value, np.integer):  
+                value = int(value)  
+            elif isinstance(value, np.floating):  
+                value = float(value)  
+            result[field] = value  
+    
+    return result  
 
-        stock_list = xtdata.get_stock_list_in_sector(sector)
-        if not stock_list: # xtquant在找不到板块或板块内无股票时返回空列表
-            # 返回空列表符合预期，表示该板块下没有股票，不应视为404错误
-            # 如果确实需要区分“板块不存在”和“板块内无股票”，xtquant本身可能不直接提供此区分
-            # 此处我们遵循xtquant的行为，返回空列表
-            pass # 继续执行并返回空列表
-        return stock_list
-    except HTTPException:
-        raise
-    except Exception as e:
-        # 记录异常信息到日志会更好
-        # print(f"Error in get_stock_list_in_sector: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error while fetching stock list for sector: {sector}")
+# 新增交易日历接口  
+@app.get("/api/v1/get_trading_dates")  
+@unified_response  
+async def get_trading_dates(market: str, start_date: str, end_date: str):  
+    # 实现交易日历获取逻辑（示例）  
+    return ["20250102", "20250103", "20250106"]  
 
-# 故事 1.6: 获取最新行情数据
-# API调用示例: requests.get("http://data-agent-service/latest_market", params={"symbols": "600519.SH,000001.SZ"})
-# 对应 xtquant.xtdata.get_latest_market_data 功能
-@app.get("/latest_market") # Pydantic模型可以稍后根据xtquant返回的具体结构定义
-async def get_latest_market_data(symbols: str = Query(..., description="Comma-separated list of stock symbols, e.g., '600519.SH,000001.SZ'")):
-    try:
-        symbol_list = [s.strip().upper() for s in symbols.split(',') if s.strip()]
-        if not symbol_list:
-            raise HTTPException(status_code=400, detail="Symbols query parameter cannot be empty.")
+# 新增K线数据接口  
+@app.get("/api/v1/hist_kline")  
+@unified_response  
+async def get_hist_kline(symbol: str, start_date: str, end_date: str, frequency: str):  
+    # 实现K线数据获取逻辑（示例）  
+    return [  
+        {"date": "20250102", "open": 10.2, "close": 10.5},  
+        {"date": "20250103", "open": 10.6, "close": 10.8}  
+    ]  
 
-        # 验证每个symbol的格式
-        for symbol in symbol_list:
-            if not re.match(r'^[A-Z0-9]{6}\.[A-Z]{2}$', symbol):
-                raise HTTPException(status_code=400, detail=f"Invalid symbol format: {symbol}. Expected format like '600519.SH'.")
-
-        # 初始化xtdata（如果尚未初始化）
-        # xtdata.init() # 实际项目中根据需要进行初始化管理
-
-        market_data = xtdata.get_latest_market_data(symbol_list)
-
-        # xtquant.get_latest_market_data 返回一个字典，键是股票代码，值是行情数据
-        # 如果某个股票代码无效或无数据，它可能不在返回的字典中，或者对应的值是特殊标记（需查阅xtquant文档）
-        # 这里我们假设如果xtquant调用成功，就返回其结果，客户端负责处理可能存在的缺失数据
-        if not market_data: # 如果返回空字典
-             raise HTTPException(status_code=404, detail=f"No market data found for symbols: {symbols}")
-
-        return market_data
-    except HTTPException:
-        raise
-    except Exception as e:
-        # print(f"Error in get_latest_market_data: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error while fetching latest market data for symbols: {symbols}")
-
-# 故事 1.7: 获取完整行情数据
-# API调用示例: requests.get("http://data-agent-service/full_market", params={"symbol": "600519.SH", "fields": "open,high,low,close,volume"})
-# 对应 xtquant.xtdata.get_full_market_data 功能
-@app.get("/full_market") # Pydantic模型可以稍后根据xtquant返回的具体结构定义
-async def get_full_market_data_endpoint(
-    symbol: str = Query(..., description="Stock symbol, e.g., '600519.SH'"),
-    fields: Optional[str] = Query(None, description="Comma-separated list of fields, e.g., 'open,high,low,close,volume'")
-):
-    try:
-        upper_symbol = symbol.strip().upper()
-        if not re.match(r'^[A-Z0-9]{6}\.[A-Z]{2}$', upper_symbol):
-            raise HTTPException(status_code=400, detail=f"Invalid symbol format: {symbol}. Expected format like '600519.SH'.")
-
-        field_list = []
-        if fields:
-            field_list = [f.strip() for f in fields.split(',') if f.strip()]
-            if not field_list and fields.strip() != "": # 用户提供了fields参数但解析后为空列表 (例如 ",, ,")
-                 raise HTTPException(status_code=400, detail="Fields parameter, if provided, cannot be empty or only commas.")
-
-
-        # 初始化xtdata（如果尚未初始化）
-        # xtdata.init() # 实际项目中根据需要进行初始化管理
-
-        # xtquant.xtdata.get_full_market_data 需要一个股票代码列表作为第一个参数
-        # 即使我们只查询单个股票，也要传递列表
-        if field_list:
-            market_data = xtdata.get_full_market_data([upper_symbol], fields=field_list)
-        else:
-            market_data = xtdata.get_full_market_data([upper_symbol]) # 获取所有可用字段
-
-        # get_full_market_data 返回一个字典，键是股票代码，值是包含字段和其值的字典
-        # 如果股票代码无效或无数据，它可能不在返回的字典中，或其值可能表示无数据
-        if not market_data or upper_symbol not in market_data or not market_data[upper_symbol]:
-            raise HTTPException(status_code=404, detail=f"No full market data found for symbol: {symbol} with specified fields.")
-
-        # API 返回单个股票的数据，所以直接返回该股票对应的数据字典
-        return market_data[upper_symbol]
-    except HTTPException:
-        raise
-    except Exception as e:
-        # print(f"Error in get_full_market_data_endpoint: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error while fetching full market data for symbol: {symbol}")
+if __name__ == "__main__":  
+    import uvicorn  
+    uvicorn.run(app, host="0.0.0.0", port=8000)  
