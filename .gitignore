@@ -27,3 +27,7 @@ uv.lock
 
 # Local configuration
 .env
+
+# Log files
+*.log
+download_log.txt

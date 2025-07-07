@@ -15,43 +15,34 @@
 # # 实时合约信息API 使用教程
 
 # ### 参数说明
-# | 参数名 | 类型 | 是否必填 | 说明 | 示例值值 |
+# | 参数名 | 类型 | 是否必填 | 说明 | 示例值 |
 # |--------|------|----------|------|--------|
-# | symbol | str | 是 | 股票代码(格式:代码.交易所) | "600519.SH" |
+# | stock_code | str | 是 | 股票代码(格式:代码.交易所) | "600519.SH" |
+# | iscomplete | bool | 否 | 是否获取全部字段，默认为False | False |
 
 # ## HTTP调用方式
-import requests
-import os  # 添加os模块导入
+from xtquant import xtdata
 
-# 从环境获取API服务地址，默认为localhost:8000
-API_BASE_URL = os.environ.get('DATA_AGENT_SERVICE_URL', 'http://localhost:8000')
+# 获取单个股票的合约详情
+# xtdata库的get_instrument_detail函数用于获取合约基础信息。
+# 参数:
+#   stock_code (str): 股票代码，格式为"代码.交易所"，例如"600519.SH"。
+#   iscomplete (bool): 是否获取全部字段，默认为False。
+# 返回:
+#   dict: 包含合约详细信息的字典。如果找不到指定合约，则返回None。
+symbol = "600519.SH"
+print(f"正在获取 {symbol} 的合约详情...")
+detail = xtdata.get_instrument_detail(symbol, iscomplete=False)
 
-try:
-    response = requests.get(
-        f"{API_BASE_URL}/instrument_detail",  # 添加/api/v1前缀
-        params={"symbol": "600519.SH"},
-        timeout=3  # 添加3秒超时
-    )
-    response.raise_for_status()  # 检查HTTP错误
-    
-    response_data = response.json()
-    
-    # 检查API返回的成功标志
-    if response_data.get('success'):
-        data = response_data['data']
-        print("调用结果：", data)
-    else:
-        error_msg = response_data.get('error', '未知错误')
-        raise ValueError(f"API调用失败: {error_msg}")
-        
-except requests.exceptions.RequestException as e:
-    print(f"网络请求错误: {str(e)}")
-    print("切换到模拟模式...")
-    # 模拟数据示例
-    simulated_data = {"data": {"symbol": "600519.SH", "name": "贵州茅台", "last_price": 1812.5, "change_percent": 1.2}}
-    print("模拟数据:", simulated_data)
-except ValueError as e:
-    print(str(e))
+if detail:
+    print(f"调用结果：{detail}")
+    # 示例：打印部分关键信息
+    print(f"股票名称: {detail.get('InstrumentName')}")
+    print(f"交易所ID: {detail.get('ExchangeID')}")
+    print(f"总股本: {detail.get('TotalVolume')}")
+    print(f"流通股本: {detail.get('FloatVolume')}")
+else:
+    print(f"未找到 {symbol} 的合约详情，请检查股票代码或确保MiniQmt服务正常运行。")
 
 # ### 实际应用场景
 # **实时监控仪表盘**：
@@ -60,32 +51,41 @@ except ValueError as e:
 # ```python
 # # 获取多只股票详情
 # symbols = ["600519.SH", "000001.SZ", "00700.HK"]
-# 
+#
+# print("\n--- 批量获取合约详情示例 ---")
 # for symbol in symbols:
-#     response = requests.get(
-#         f"{API_BASE_URL}/instrument_detail",  # 添加前缀
-#         params={"symbol": symbol},
-#         timeout=3  # 添加超时
-#     )
-#     
-#     # 业务数据验证
-#     response_data = response.json()
-#     if response_data.get('success'):
-#         detail = response_data['data']
-#         print(f"{symbol} 最新价: {detail['last_price']} 涨跌幅: {detail['change_percent']}%")
+#     detail = xtdata.get_instrument_detail(symbol, iscomplete=False)
+#     if detail:
+#         # 假设我们需要展示股票名称和总股本
+#         name = detail.get('InstrumentName', 'N/A')
+#         total_volume = detail.get('TotalVolume', 'N/A')
+#         print(f"股票代码: {symbol}, 名称: {name}, 总股本: {total_volume}")
 #     else:
-#         error_msg = response_data.get('error', '未知错误')
-#         print(f"{symbol}: {error_msg}")
+#         print(f"未找到 {symbol} 的合约详情。")
 # ```
 
 # ### 错误处理
-# | 错误码 | 含义 | 解决方案 |
-# |--------|------|----------|
-# | 400 | 参数缺失或格式错误 | 检查symbol格式是否正确 |
-# | 404 | 服务未找到 | 确认API服务是否正常运行 |
-# | 500 | 服务器内部 | 检查服务日志排查问题 |
-# | 1003 | 无效股票代码 | 使用正确的股票代码格式(代码.交易所) |
-# | 1006 | 股票信息不存在 | 确认股票代码是否正确且已上市 |
+# `xtdata.get_instrument_detail` 函数在找不到合约时会返回 `None`。
+#
+# ```python
+# # 错误处理示例
+# print("\n--- 错误处理示例 ---")
+# invalid_symbol = "INVALID.XX"
+# print(f"正在尝试获取无效股票代码 {invalid_symbol} 的合约详情...")
+# detail_invalid = xtdata.get_instrument_detail(invalid_symbol)
+#
+# if detail_invalid is None:
+#     print(f"成功处理错误：未找到 {invalid_symbol} 的合约详情。")
+# else:
+#     print(f"意外：找到了 {invalid_symbol} 的合约详情。")
+# ```
+#
+# 对于更底层的连接错误，`xtdata` 库通常会自行处理或抛出 `XtQuantError` 等特定异常。
+#
+# | 常见问题 | 解决方案 |
+# |--------|----------|
+# | 返回 `None` | 检查股票代码格式是否正确，或确认该股票是否存在。 |
+# | 连接错误 | 确保MiniQmt服务正常运行，且xtdata已正确连接。 |
 
 # ### 性能优化建议
 # 1. **批量查询**：使用批量查询接口减少请求次数
@@ -94,15 +94,16 @@ except ValueError as e:
 # 4. **连接池复用**：保持HTTP连接复用减少握手开销
 
 # ### FAQ常见问题
-# **Q: 是否支持查询港股和美股？**  
-# A: 支持，港股代码后缀.HK，美股代码后缀.US
-#
-# **Q: 返回的数据包含哪些字段？**  
-# A: 包含股票代码、名称、最新价、涨跌幅、市值、PE等核心指标
+# **Q: `get_instrument_detail` 返回的数据包含哪些字段？**  
+# A: 默认情况下（`iscomplete=False`），返回常用字段如 `ExchangeID`, `InstrumentID`, `InstrumentName`, `TotalVolume`, `FloatVolume` 等。当 `iscomplete=True` 时，将返回所有可用字段，详见 `argus-doc/api/xtdata.md` 文档中的“合约信息字段列表”部分。
 #
 # **Q: 如何获取历史合约信息？**  
-# A: 当前API只返回实时数据，历史数据需使用其他服务
-
+# A: `get_instrument_detail` 函数主要用于获取合约的基础静态信息。对于历史行情数据（如K线、分笔数据），应使用 `xtdata` 模块中的 `get_market_data` 或 `download_history_data` 等函数。
+#
+# **Q: 是否支持查询港股和美股？**  
+# A: 支持。港股代码后缀为 `.HK`，美股代码后缀为 `.US`。
+#
 # ## 注意事项
-# - 确保服务运行在data-agent-service
-# - 需要指定正确的股票代码symbol
+# - 确保MiniQmt服务正常运行，xtdata库依赖于此服务获取数据。
+# - 需要指定正确的股票代码 `stock_code`，格式为 `代码.交易所`。
+# - `get_instrument_detail` 返回的是合约的基础信息，而非实时行情数据。实时行情数据请使用 `subscribe_quote` 或 `get_market_data`。

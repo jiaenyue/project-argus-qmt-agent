@@ -15,67 +15,96 @@
 # # 完整行情数据API 使用教程
 
 # ### 参数说明
-# | 参数名 | 类型 | 是否必填 | 极明 | 示例值 |
+# | 参数名 | 类型 | 是否必填 | 说明 | 示例值 |
 # |--------|------|----------|------|--------|
 # | symbol | str | 是 | 股票代码(格式:代码.交易所) | "600519.SH" |
 # | fields | str | 否 | 请求字段(逗号分隔,默认全部) | "open,high,low,close,volume" |
 
 # ## HTTP调用方式
-import requests
-import os  # 添加os模块导入
+from xtquant import xtdata
+import threading
+import time
 
-# 从环境变量获取API服务地址，默认为localhost:8000
-API_BASE_URL = os.environ.get('DATA_AGENT_SERVICE_URL', 'http://localhost:8000')
+# ### xtdata库调用方式
 
-try:
-    response = requests.get(
-        f"{API_BASE_URL}/full_market",  # 添加/api/v1前缀
-        params={"symbol": "600519.SH", "fields": "open,high,low,close,volume"},
-        timeout=3  # 添加3秒超时
-    )
-    response.raise_for_status()  # 检查HTTP错误
+# 定义数据推送回调函数
+# 当订阅的全推行情数据有更新时，此函数会被调用
+def on_full_tick_data(datas):
+    """
+    全推行情数据回调函数。
+    datas: 字典，格式为 { stock_code : data }，其中data是最新分笔数据。
+    """
+    print(f"收到全推行情数据更新，时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))}")
+    for stock_code, data in datas.items():
+        print(f"  合约代码: {stock_code}, 最新价: {data.get('lastPrice')}, 成交量: {data.get('volume')}")
+
+# 1. 订阅全推行情数据
+# 使用 subscribe_whole_quote 订阅指定市场或合约的全推行情。
+# 这里订阅沪深两市的所有合约的全推数据。
+print("开始订阅沪深两市全推行情数据...")
+# code_list 可以是市场代码列表，如 ['SH', 'SZ']，或合约代码列表，如 ['600519.SH', '000001.SZ']
+# 订阅成功会返回一个订阅号 (seq)，失败返回 -1
+subscribe_id = xtdata.subscribe_whole_quote(code_list=['SH', 'SZ'], callback=on_full_tick_data)
+
+if subscribe_id != -1:
+    print(f"全推行情订阅成功，订阅号: {subscribe_id}")
+    # 2. 获取全推数据
+    # 使用 get_full_tick 获取当前最新的全推数据快照。
+    # 注意：get_full_tick 返回的是当前时刻的快照数据，不会触发回调。
+    print("\n获取当前全推数据快照...")
+    # code_list 参数与 subscribe_whole_quote 相同
+    full_tick_data = xtdata.get_full_tick(code_list=['600519.SH', '000001.SZ'])
     
-    response_data = response.json()
-    
-    # 检查API返回的成功标志
-    if response_data.get('success'):
-        data = response_data['data']
-        print("调用结果：", data)
+    if full_tick_data:
+        print("成功获取全推数据快照:")
+        for stock_code, data in full_tick_data.items():
+            print(f"  合约代码: {stock_code}, 最新价: {data.get('lastPrice')}, 成交量: {data.get('volume')}")
     else:
-        error_msg = response_data.get('error', '未知错误')
-        raise ValueError(f"API调用失败: {error_msg}")
-        
-except requests.exceptions.RequestException as e:
-    print(f"网络请求错误: {str(e)}")
-    print("切换到模拟模式...")
-    # 模拟数据示例
-    simulated_data = {"data": [{"date": "20230103", "open": 180.0, "high": 182.5, "low": 179.5, "close": 181.2}]}
-    print("模拟数据:", simulated_data)
-except ValueError as e:
-    print(str(e))
+        print("未能获取全推数据快照，请确保MiniQmt已连接且有数据。")
+
+    # 3. 阻塞线程以持续接收行情回调
+    # xtdata.run() 会阻塞当前线程，使程序保持运行状态，以便持续接收订阅数据。
+    # 在实际应用中，可以根据需要设置运行时间或通过其他方式控制程序的生命周期。
+    print("\n程序将持续运行10秒以接收实时行情推送...")
+    xtdata.run() # 这会阻塞直到程序被中断或连接断开
+    time.sleep(10) # 模拟程序运行一段时间
+    
+    # 4. 反订阅行情数据
+    # 使用 unsubscribe_quote 取消订阅，释放资源。
+    print(f"\n反订阅全推行情数据，订阅号: {subscribe_id}...")
+    xtdata.unsubscribe_quote(subscribe_id)
+    print("反订阅成功。")
+else:
+    print("全推行情订阅失败，请检查xtdata连接和MiniQmt状态。")
 
 # ### 实际应用场景
-# **深度行情分析**：
-# 获取股票的完整行情数据用于深度技术分析和策略决策。
+# **实时市场监控**：
+# 订阅全推行情数据，实时监控整个市场的最新价格和成交量，用于高频交易策略或市场异动分析。
 #
 # ```python
-# # 获取贵州茅台完整行情数据
-# response = requests.get(
-#     f"{API_BASE_URL}/full_market",  # 添加前缀
-#     params={"symbol": "600519.SH", "fields": "open,high,low,close,volume,amount,pe,pb"},
-#     timeout=3  # 添加超时
-# )
-# 
-# response_data = response.json()
-# if response_data.get('success'):
-#     full_data = response_data['data']
-#     # 计算技术指标
-#     close_prices = [day['close'] for day in full_data]
-#     rsi = calculate_rsi(close_prices)
-#     print(f"RSI指标: {rsi[-1]:.2f}")
+# import xtdata
+# import time
+#
+# # 定义回调函数，处理接收到的全推数据
+# def on_market_update(datas):
+#     for stock_code, data in datas.items():
+#         # 打印关键行情信息，例如最新价、成交量
+#         print(f"实时更新 - {stock_code}: 最新价={data.get('lastPrice')}, 成交量={data.get('volume')}")
+#
+# # 订阅沪深两市的全推行情
+# # 传入市场代码列表 ['SH', 'SZ'] 表示订阅整个沪深市场
+# subscribe_id_monitor = xtdata.subscribe_whole_quote(code_list=['SH', 'SZ'], callback=on_market_update)
+#
+# if subscribe_id_monitor != -1:
+#     print(f"市场监控订阅成功，订阅号: {subscribe_id_monitor}")
+#     # 持续运行以接收实时数据，例如运行30秒
+#     print("开始实时监控市场行情，持续30秒...")
+#     time.sleep(30)
+#     # 取消订阅
+#     xtdata.unsubscribe_quote(subscribe_id_monitor)
+#     print("市场监控已停止。")
 # else:
-#     error_msg = response_data.get('error', '未知错误')
-#     print(f"API调用失败: {error_msg}")
+#     print("市场监控订阅失败。")
 # ```
 
 # ### 错误处理
@@ -91,7 +120,7 @@ except ValueError as e:
 # 1. **按需请求**：只请求需要的字段减少响应大小
 # 2. **分页获取**：历史数据量过大时分页获取
 # 3. **本地缓存**：对历史数据进行本地存储避免重复请求
-# 4. **压缩传输极：启用gzip压缩减少网络传输量
+# 4. **压缩传输：启用gzip压缩减少网络传输量
 # 5. **增量更新**：只获取最新变更数据减少传输量
 
 # ### FAQ常见问题

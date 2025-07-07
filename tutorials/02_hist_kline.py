@@ -24,121 +24,103 @@
 # | frequency | str | 是 | K线周期(1d-日线,1m-1分钟) | "1d" |
 
 # ## HTTP调用方式
-import requests
-import os
-import time
-import socket
+from xtquant import xtdata
+import pandas as pd
 
-def find_available_port():
-    """动态检测可用端口"""
-    for port in [8000, 58610, 8001]:
-        try:
-            with socket.socket() as s:
-                s.settimeout(1)
-                s.connect(("localhost", port))
-                return port
-        except:
-            continue
-    return None
-
-# 动态获取API服务地址
-if 'DATA_AGENT_SERVICE_URL' in os.environ:
-    API_BASE_URL = os.environ['DATA_AGENT_SERVICE_URL']
-else:
-    detected_port = find_available_port()
-    API_BASE_URL = f"http://localhost:{detected_port}" if detected_port else 'http://localhost:8000'
-    print(f"⚠️ 使用动态检测的API地址: {API_BASE_URL}")
-
-def fetch_kline_with_retry(params, max_retries=3, retry_delay=1):
-    """带重试机制的K线数据获取函数"""
-    for attempt in range(max_retries):
-        try:
-            # 检查API服务状态
-            status_response = requests.get(f"{API_BASE_URL}/api/v1/status", timeout=1)
-            if status_response.status_code != 200:
-                raise ConnectionError(f"API服务不可用: HTTP {status_response.status_code}")
-                
-            # 发送主请求
-            response = requests.get(
-                f"{API_BASE_URL}/api/v1/hist_kline",
-                params=params,
-                timeout=3
-            )
-            response.raise_for_status()
-            
-            # 业务数据验证
-            data = response.json()
-            if 'success' in data and data['success']:
-                if 'data' in data:
-                    return data
-                else:
-                    raise ValueError("API响应缺少'data'字段")
-            else:
-                error_code = data.get('error_code', '未知')
-                error_msg = data.get('message', '未知错误')
-                raise ValueError(f"API业务错误 {error_code}: {error_msg}")
-                
-        except (requests.exceptions.RequestException, ValueError, ConnectionError) as e:
-            if attempt < max_retries - 1:
-                print(f"尝试失败 ({attempt+1}/{max_retries}): {e}")
-                time.sleep(retry_delay)
-            else:
-                raise
+# ## xtdata库调用方式
 
 # 主请求参数
-params = {
-    "symbol": "600519.SH",
-    "start_date": "20230101",
-    "end_date": "20231231",
-    "frequency": "1d"
-}
+stock_list = ["600519.SH"]
+start_time = "20250630" # 尝试获取上周的数据
+end_time = "20250704"   # 尝试获取上周的数据
+period = "1d"
 
 try:
-    # 使用带重试的请求函数
-    result = fetch_kline_with_retry(params)
+    # 尝试下载历史数据，确保数据可用
+    print(f"正在下载 {stock_list[0]} 从 {start_time} 到 {end_time} 的 {period} K线数据...")
+    xtdata.download_history_data(
+        stock_list[0],
+        period,
+        start_time=start_time,
+        end_time=end_time
+    )
+    print("数据下载完成。")
+
+    # 使用xtdata库获取K线数据
+    kline_data = xtdata.get_market_data(
+        stock_list=stock_list,
+        period=period,
+        start_time=start_time,
+        end_time=end_time,
+        field_list=['time', 'open', 'high', 'low', 'close', 'volume', 'amount']
+    )
     
-    if result:
-        print("调用成功，数据样例:", result['data'][0] if result['data'] else "空数据集")
-    else:
-        raise RuntimeError("所有重试均失败")
+    print(f"获取到的kline_data类型: {type(kline_data)}")
+    if isinstance(kline_data, dict) and kline_data: # 检查是否为非空字典
+        print(f"kline_data的键: {kline_data.keys()}")
+        # 检查每个字段的DataFrame是否包含目标股票的数据且不为空
+        all_fields_present_and_not_empty = True
+        for field in ['time', 'open', 'high', 'low', 'close', 'volume', 'amount']:
+            if field not in kline_data or kline_data[field].empty or stock_list[0] not in kline_data[field].index:
+                all_fields_present_and_not_empty = False
+                print(f"字段 '{field}' 的数据缺失或为空，或股票 '{stock_list[0]}' 的数据在字段 '{field}' 中缺失。")
+                break
         
+        if all_fields_present_and_not_empty:
+            print("调用成功，数据样例:")
+            first_stock_code = stock_list[0]
+            # 获取实际数据中的第一个日期作为示例
+            # 假设所有字段的DataFrame都有相同的日期列
+            if not kline_data['open'].empty and not kline_data['open'].columns.empty:
+                example_date = kline_data['open'].columns[0] # 获取第一个日期
+                print(f"示例日期: {example_date}")
+
+                print(f"股票 {first_stock_code} 在 {example_date} 的开盘价: {kline_data['open'][example_date][first_stock_code]}")
+                print(f"股票 {first_stock_code} 在 {example_date} 的收盘价: {kline_data['close'][example_date][first_stock_code]}")
+                print(f"股票 {first_stock_code} 在 {example_date} 的最高价: {kline_data['high'][example_date][first_stock_code]}")
+                print(f"股票 {first_stock_code} 在 {example_date} 的最低价: {kline_data['low'][example_date][first_stock_code]}")
+                print(f"股票 {first_stock_code} 在 {example_date} 的成交量: {kline_data['volume'][example_date][first_stock_code]}")
+                print(f"股票 {first_stock_code} 在 {example_date} 的成交额: {kline_data['amount'][example_date][first_stock_code]}")
+                print(f"股票 {first_stock_code} 在 {example_date} 的时间戳: {kline_data['time'][example_date][first_stock_code]}")
+            else:
+                print("开盘价数据为空或没有日期列，无法获取示例数据。")
+        else:
+            print("未获取到完整数据或数据为空。")
+    else:
+        print("kline_data不是预期的非空字典类型。")
 except Exception as e:
-    print(f"错误: {e}")
-    print("切换到模拟模式...")
-    print("⚠️ 警告: 使用模拟数据替代")
-    # 生成完整的模拟数据
-    simulated_data = {
-        "success": True,
-        "data": [
-            {"date": "20230103", "open": 180.0, "high": 182.5, "low": 179.5, "close": 181.2, "volume": 100000},
-            {"date": "20230104", "open": 181.5, "high": 183.8, "low": 180.8, "close": 182.0, "volume": 120000},
-            {"date": "20230105", "open": 182.5, "high": 184.0, "low": 181.0, "close": 183.5, "volume": 95000},
-            {"date": "20230106", "open": 183.0, "high": 185.5, "low": 182.5, "close": 184.8, "volume": 110000},
-            {"date": "20230109", "open": 184.5, "high": 186.0, "low": 183.8, "close": 185.2, "volume": 105000}
-        ]
-    }
-    print("模拟数据样例:", simulated_data['data'][0])
+    print(f"获取数据失败: {e}")
+    print("请确保MiniQmt已运行并连接成功，且数据权限正常。")
 
 # ### 实际应用场景
 # **量化策略回测**：
-# 获取历史K线数据是量化策略回测的基础。通过本API获取指定股票的历史价格数据，用于计算策略指标和回测收益。
+# 获取历史K线数据是量化策略回测的基础。通过xtdata库获取指定股票的历史价格数据，用于计算策略指标和回测收益。
 #
 # ```python
 # # 获取贵州茅台2023年日K线
-# params = {
-#     "symbol": "600519.SH",
-#     "start_date": "20230101",
-#     "end_date": "20231231",
-#     "frequency": "1d"
-# }
-# 
-# # 使用带重试的请求函数
-# result = fetch_kline_with_retry(params)
-# if result:
-#     kline_data = result['data']
+# stock_list = ["600519.SH"]
+# start_time = "20230101"
+# end_time = "20231231"
+# period = "1d"
+#
+# kline_data = xtdata.get_market_data(
+#     stock_list=stock_list,
+#     period=period,
+#     start_time=start_time,
+#     end_time=end_time,
+#     field_list=['close'] # 只获取收盘价用于计算均线
+# )
+#
+# if kline_data and stock_list[0] in kline_data['close'] and not kline_data['close'].empty:
+#     close_prices = kline_data['close'][stock_list[0]].tolist()
 #     # 计算20日移动平均线
-#     close_prices = [bar['close'] for bar in kline_data]
-#     ma20 = sum(close_prices[-20:]) / 20
+#     if len(close_prices) >= 20:
+#         ma20 = sum(close_prices[-20:]) / 20
+#         print(f"贵州茅台20日移动平均线: {ma20}")
+#     else:
+#         print("数据不足20条，无法计算20日移动平均线。")
+# else:
+#     print("未获取到K线数据，无法计算移动平均线。")
 # ```
 
 # ### 错误处理
