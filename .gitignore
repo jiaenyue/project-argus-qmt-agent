@@ -31,3 +31,6 @@ uv.lock
 # Log files
 *.log
 download_log.txt
+
+#kiro
+.kiro
