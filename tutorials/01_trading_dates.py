@@ -13,94 +13,317 @@
 #     name: python3
 # ---
 
-# # 交易日历API 使用教程
+# -*- coding: utf-8 -*-
+"""
+交易日历API使用教程 - Project Argus QMT 数据代理服务
 
-# ### 参数说明
-# `xtdata.get_trading_dates` 函数用于获取指定市场在给定时间范围内的交易日列表。
-# | 参数名 | 类型 | 是否必填 | 说明 | 示例值 |
-# |--------|------|----------|------|--------|
-# | market | str | 是 | 市场代码 (例如 "SH" - 上交所, "SZ" - 深交所) | "SH" |
-# | start_time | str | 否 | 起始日期 (YYYYMMDD)。为空表示当前市场首个交易日时间。 | "20250101" |
-# | end_time | str | 否 | 结束日期 (YYYYMMDD)。为空表示当前时间。 | "20250107" |
-# | count | int | 否 | 数据个数。大于0时，若指定了start_time, end_time，则以end_time为基准向前取count条；若start_time, end_time缺省，默认取本地数据最新的count条数据；若start_time, end_time, count都缺省时，默认取本地全部数据。默认值为-1，表示返回全部。 | -1 |
+本教程演示如何使用统一的API客户端获取交易日历数据，
+包括基础查询、日期范围查询、回测应用等实际场景。
 
-# ## xtdata库调用方式
-# 首先，我们需要导入 `xtdata` 库。
-from xtquant import xtdata
+功能特性:
+- 统一的API客户端调用
+- 自动错误处理和重试机制
+- 模拟数据降级处理
+- 性能监控和统计
+- 实际应用场景演示
+"""
+
 import datetime
+from typing import List, Dict, Any
 
-# 为了演示，我们获取最近的交易日。
-# 注意：`xtdata` 库需要连接到MiniQmt以获取数据。请确保MiniQmt已正确运行并连接到行情服务器。
+# 导入统一工具库
+from common.api_client import create_api_client, safe_api_call
+from common.mock_data import MockDataGenerator
+from common.utils import (
+    print_section_header, print_subsection_header, print_api_result,
+    create_demo_context, get_date_range
+)
+from common.config import get_config
 
-# 获取指定市场和日期范围的交易日历
-# 示例：获取上海证券交易所2025年1月1日至2025年1月7日的交易日
-market_code = "SH"
-start_date_str = "20250101"
-end_date_str = "20250107"
-
-print(f"尝试获取 {market_code} 市场从 {start_date_str} 到 {end_date_str} 的交易日...")
-
+# 保留xtdata导入以支持本地库调用演示
 try:
-    # 调用xtdata.get_trading_dates函数
-    trading_dates = xtdata.get_trading_dates(
-        market=market_code,
-        start_time=start_date_str,
-        end_time=end_date_str
-    )
-    print(f"获取到的交易日列表 ({market_code}): {trading_dates}")
+    from xtquant import xtdata
+    XTDATA_AVAILABLE = True
+except ImportError:
+    XTDATA_AVAILABLE = False
+    print("注意: xtdata库不可用，将跳过本地库演示")
 
-    # 进一步示例：获取最近5个交易日
-    print("\n尝试获取最近5个交易日...")
-    recent_trading_dates = xtdata.get_trading_dates(
-        market=market_code,
-        count=5 # 使用count参数获取最近的交易日
-    )
-    print(f"最近5个交易日列表 ({market_code}): {recent_trading_dates}")
-except Exception as e:
-    print(f"调用xtdata.get_trading_dates失败: {e}")
-    print("请确保MiniQmt已正确运行并连接到行情服务器，且数据服务可用。")
-# ## 实际应用场景
-# ### 回测系统日期验证
-# 在量化回测中，需要验证策略在交易日和非交易日的执行情况。通过 `xtdata.get_trading_dates` API 获取指定时间段的交易日历，用于回测引擎的日期过滤。
+# 初始化工具和配置
+config = get_config()
+demo_context = create_demo_context()
+performance_monitor = demo_context['performance_monitor']
 
-# 示例：获取2025年第一季度的交易日历
-try:
-    q1_start = "20250101"
-    q1_end = "20250331"
-    print(f"\n获取 {market_code} 市场2025年第一季度 ({q1_start} - {q1_end}) 的交易日历...")
-    q1_trading_dates = xtdata.get_trading_dates(
-        market=market_code,
-        start_time=q1_start,
-        end_time=q1_end
-    )
-    print(f"2025年第一季度交易日数量: {len(q1_trading_dates)}")
-    print(f"部分交易日: {q1_trading_dates[:5]} ... {q1_trading_dates[-5:]}")
 
-    # 模拟在回测引擎中使用交易日
-    def run_backtest(date):
-        """模拟回测函数"""
-        # print(f"在 {date} 执行回测逻辑...")
-        pass
+def _call_api_with_fallback(client, api_method_name, **kwargs):
+    """统一的API调用和降级处理函数
+    
+    Args:
+        client: API客户端实例
+        api_method_name (str): API方法名称
+        **kwargs: API方法参数
+        
+    Returns:
+        Dict: API调用结果，失败时自动降级到模拟数据
+    """
+    # 获取API方法
+    api_method = getattr(client, api_method_name)
+    
+    # 尝试API调用
+    result = safe_api_call(client, api_method, **kwargs)
+    
+    # 如果API失败，使用模拟数据
+    if result.get('code') != 0:
+        print("  API调用失败，使用模拟数据")
+        mock_generator = MockDataGenerator()
+        
+        # 转换日期格式用于模拟数据生成（从YYYY-MM-DD转换为YYYYMMDD）
+        mock_kwargs = kwargs.copy()
+        for date_key in ['start_date', 'end_date']:
+            if date_key in mock_kwargs and mock_kwargs[date_key]:
+                date_str = mock_kwargs[date_key]
+                if '-' in date_str:  # YYYY-MM-DD格式
+                    mock_kwargs[date_key] = date_str.replace('-', '')
+        
+        # 根据API方法名称调用对应的模拟数据生成方法
+        if api_method_name == 'get_trading_dates':
+            result = mock_generator.generate_trading_dates(**mock_kwargs)
+        elif api_method_name == 'get_hist_kline':
+            result = mock_generator.generate_hist_kline(**mock_kwargs)
+        elif api_method_name == 'get_instrument_detail':
+            result = mock_generator.generate_instrument_detail(**mock_kwargs)
+        elif api_method_name == 'get_stock_list':
+            result = mock_generator.generate_stock_list(**mock_kwargs)
+        elif api_method_name == 'get_latest_market':
+            result = mock_generator.generate_latest_market(**mock_kwargs)
+        elif api_method_name == 'get_full_market':
+            result = mock_generator.generate_full_market(**mock_kwargs)
+        else:
+            # 默认错误响应
+            result = {
+                'code': -1,
+                'message': f'不支持的API方法: {api_method_name}',
+                'data': None
+            }
+    
+    return result
 
-    print("\n模拟在回测引擎中遍历交易日...")
-    for date in q1_trading_dates:
-        run_backtest(date)
-    print("回测日历遍历完成。")
-except Exception as e:
-    print(f"回测场景演示失败: {e}")
 
-# ## 错误处理与注意事项
-# 当调用 `xtdata` 库函数时，如果遇到错误，通常会抛出Python异常。
-# 常见的错误原因可能包括：
-# - **MiniQmt未运行或连接失败**：`xtdata` 依赖于MiniQmt提供数据服务。
-# - **参数错误**：传入的 `market` 代码不正确，或者日期格式不符合 `YYYYMMDD`。
-# - **数据服务问题**：MiniQmt连接的行情服务器数据源未更新或不可用。
 
-# **解决方案**：
-# 1. 确保MiniQmt客户端已启动并登录。
-# 2. 检查MiniQmt的行情连接状态，确保数据源正常。
-# 3. 仔细核对 `get_trading_dates` 函数的参数，确保 `market` 代码（如"SH", "SZ"）和日期格式（`YYYYMMDD`）正确无误。
-# 4. 对于日期范围，确保 `start_time` 不晚于 `end_time`。
+def demo_basic_trading_dates():
+    """演示基础交易日历查询功能"""
+    print_subsection_header("基础交易日历查询")
+    
+    with create_api_client() as client:
+        # 演示1: 获取指定日期范围的交易日
+        market = "SH"
+        start_date = "2025-01-01"
+        end_date = "2025-01-07"
+        
+        print(f"获取 {market} 市场 {start_date} 到 {end_date} 的交易日...")
+        result = _call_api_with_fallback(
+            client, 'get_trading_dates', 
+            market=market, start_date=start_date, end_date=end_date
+        )
+        print_api_result(result, f"{market}市场交易日历")
+        
+        # 演示2: 获取最近N个交易日
+        print(f"\n获取 {market} 市场最近5个交易日...")
+        result_recent = _call_api_with_fallback(
+            client, 'get_trading_dates',
+            market=market, count=5
+        )
+        print_api_result(result_recent, f"{market}市场最近交易日")
 
-# `xtdata` 库的 `get_trading_dates` 函数返回的是一个日期字符串列表，例如 `['20250102', '20250103', '20250106']`。
-# 该函数只返回交易日，不会包含节假日或周末。
+
+def demo_multi_market_comparison():
+    """演示多市场交易日历对比"""
+    print_subsection_header("多市场交易日历对比")
+    
+    with create_api_client() as client:
+        markets = config.demo_markets
+        start_date, end_date = get_date_range(7)  # 最近7天
+        
+        market_data = {}
+        
+        for market in markets:
+            print(f"获取 {market} 市场交易日历...")
+            result = _call_api_with_fallback(
+                client, 'get_trading_dates',
+                market=market, start_date=start_date, end_date=end_date
+            )
+            
+            if result.get('code') == 0:
+                market_data[market] = result['data']
+                print(f"  {market}: {len(result['data'])} 个交易日")
+            else:
+                print(f"  {market}: 获取失败")
+        
+        # 分析市场差异
+        if len(market_data) > 1:
+            print("\n市场交易日对比分析:")
+            all_dates = set()
+            for dates in market_data.values():
+                all_dates.update(dates)
+            
+            common_dates = set(market_data[markets[0]])
+            for market in markets[1:]:
+                if market in market_data:
+                    common_dates &= set(market_data[market])
+            
+            print(f"  共同交易日: {len(common_dates)} 天")
+            print(f"  总交易日: {len(all_dates)} 天")
+        else:
+            print("\n无法进行市场对比分析（数据不足）")
+
+
+def demo_xtdata_local_calls():
+    """演示xtdata本地库调用"""
+    if not XTDATA_AVAILABLE:
+        print_subsection_header("xtdata本地库调用 (跳过 - 库不可用)")
+        return
+    
+    print_subsection_header("xtdata本地库调用演示")
+    
+    market = "SH"
+    start_date = "20250101"
+    end_date = "20250107"
+    
+    try:
+        print(f"通过xtdata获取 {market} 市场 {start_date} 到 {end_date} 的交易日...")
+        local_dates = xtdata.get_trading_dates(market=market, start_time=start_date, end_time=end_date)
+        print(f"  结果: {local_dates}")
+        
+        print(f"\n通过xtdata获取 {market} 市场最近5个交易日...")
+        recent_dates = xtdata.get_trading_dates(market=market, count=5)
+        print(f"  结果: {recent_dates}")
+        
+    except Exception as e:
+        print(f"xtdata调用失败: {e}")
+        print("使用模拟数据替代...")
+        mock_generator = MockDataGenerator()
+        mock_result = mock_generator.generate_trading_dates(market, start_date, end_date)
+        if mock_result.get('code') == 0:
+            print(f"  模拟数据: {mock_result['data']}")
+
+
+def demo_backtest_application():
+    """演示回测系统中的交易日历应用"""
+    print_subsection_header("回测系统应用场景")
+    
+    with create_api_client() as client:
+        # 获取一个季度的交易日历用于回测
+        market = "SH"
+        start_date = "2025-01-01"
+        end_date = "2025-03-31"
+        
+        print(f"获取 {market} 市场 2025年第一季度交易日历...")
+        result = _call_api_with_fallback(
+            client, 'get_trading_dates',
+            market=market, start_date=start_date, end_date=end_date
+        )
+        
+        if result.get('code') == 0:
+            trading_dates = result['data']
+            print(f"  获取到 {len(trading_dates)} 个交易日")
+            print(f"  日期范围: {trading_dates[0]} 到 {trading_dates[-1]}")
+            
+            # 模拟回测引擎使用交易日历
+            print("\n模拟回测引擎处理:")
+            processed_count = 0
+            for date in trading_dates[:10]:  # 限制处理数量
+                # 模拟回测逻辑
+                processed_count += 1
+            
+            print(f"  处理了 {processed_count} 个交易日的回测数据")
+            
+            # 统计分析
+            print(f"\n交易日历统计:")
+            print(f"  总交易日: {len(trading_dates)}")
+            print(f"  平均每月交易日: {len(trading_dates) / 3:.1f}")
+        else:
+            print("  无法获取交易日历数据，回测演示跳过")
+
+
+def demo_error_handling():
+    """演示错误处理和降级机制"""
+    print_subsection_header("错误处理演示")
+    
+    # 创建一个会失败的客户端（错误的URL）
+    print("尝试连接到无效的API服务...")
+    try:
+        with create_api_client(base_url="http://invalid-url:9999") as client:
+            result = _call_api_with_fallback(
+                client, 'get_trading_dates',
+                market="SH", count=5
+            )
+            print_api_result(result, "错误处理演示结果")
+            
+    except Exception as e:
+        print(f"演示异常处理: {e}")
+        # 即使客户端创建失败，也提供模拟数据
+        mock_generator = MockDataGenerator()
+        mock_result = mock_generator.generate_trading_dates(market="SH", count=5)
+        print_api_result(mock_result, "异常情况下的模拟数据")
+
+
+def print_usage_guide():
+    """打印使用指南和注意事项"""
+    print_subsection_header("使用指南和注意事项")
+    
+    print("""
+API参数说明:
+  market     : 市场代码 (SH-上交所, SZ-深交所)
+  start_date : 开始日期 (YYYY-MM-DD格式)
+  end_date   : 结束日期 (YYYY-MM-DD格式)  
+  count      : 返回数量 (-1表示全部, >0表示指定数量)
+
+常见错误和解决方案:
+  1. 连接错误 - 确保API服务运行在 http://127.0.0.1:8000
+  2. 参数错误 - 检查市场代码和日期格式
+  3. 超时错误 - 检查网络连接和服务状态
+  4. 数据为空 - 可能是非交易日期间或参数错误
+
+最佳实践:
+  - 使用统一的API客户端进行调用
+  - 实现错误处理和重试机制
+  - 在API不可用时降级到模拟数据
+  - 监控API调用性能和成功率
+""")
+
+
+def main():
+    """主函数 - 执行所有演示"""
+    print_section_header("交易日历API使用教程")
+    
+    try:
+        # 基础功能演示
+        demo_basic_trading_dates()
+        
+        # 多市场对比演示
+        demo_multi_market_comparison()
+        
+        # 本地库调用演示
+        demo_xtdata_local_calls()
+        
+        # 实际应用场景演示
+        demo_backtest_application()
+        
+        # 错误处理演示
+        demo_error_handling()
+        
+        # 使用指南
+        print_usage_guide()
+        
+        # 性能统计
+        print_section_header("性能统计报告")
+        performance_monitor.print_summary()
+        
+    except Exception as e:
+        print(f"教程执行出错: {e}")
+    
+    finally:
+        print_section_header("教程完成")
+
+
+if __name__ == "__main__":
+    main()

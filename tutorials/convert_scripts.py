@@ -53,14 +53,5 @@ def convert_ipynb_to_py_with_outputs():
             print(f"Stderr: {e.stderr}")
 
 if __name__ == "__main__":
-    print("Choose an option:")
-    print("1. Convert .py files to .ipynb")
-    print("2. Convert .ipynb files to .py (with outputs)")
-    choice = input("Enter your choice (1 or 2): ")
-
-    if choice == '1':
-        convert_py_to_ipynb()
-    elif choice == '2':
-        convert_ipynb_to_py_with_outputs()
-    else:
-        print("Invalid choice. Please enter 1 or 2.")
+    # 直接调用转换 .py 到 .ipynb 的函数，因为 nbconvert 不支持交互式输入
+    convert_py_to_ipynb()
