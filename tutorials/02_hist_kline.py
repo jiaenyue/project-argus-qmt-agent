@@ -79,27 +79,32 @@ def get_hist_kline_data(symbol: str, start_date: str, end_date: str, frequency: 
     # 处理返回数据
     if result and result.get("code") == 0:
         kline_data_list = result.get("data", [])
-        if kline_data_list:
-            # 转换为DataFrame
-            df = pd.DataFrame(kline_data_list)
+        if not kline_data_list:
+            # 如果数据为空，创建一个空的DataFrame但带有正确的列
+            df = pd.DataFrame(columns=['date', 'open', 'high', 'low', 'close', 'volume', 'amount'])
+            df.set_index('date', inplace=True)
+            return df
             
-            # 处理日期索引
-            if 'date' in df.columns:
-                # 处理不同的日期格式
-                if df['date'].dtype == 'object':
-                    # 字符串格式日期
-                    if len(str(df['date'].iloc[0])) == 8:  # YYYYMMDD格式
-                        df['date'] = pd.to_datetime(df['date'], format='%Y%m%d')
-                    else:
-                        df['date'] = pd.to_datetime(df['date'])
-                df.set_index('date', inplace=True)
-            elif 'time' in df.columns:
-                # 时间戳格式
-                if df['time'].dtype in ['int64', 'float64']:
-                    df['time'] = pd.to_datetime(df['time'], unit='ms')
+        # 转换为DataFrame
+        df = pd.DataFrame(kline_data_list)
+        
+        # 处理日期索引
+        if 'date' in df.columns:
+            # 处理不同的日期格式
+            if df['date'].dtype == 'object':
+                # 字符串格式日期
+                if len(str(df['date'].iloc[0])) == 8:  # YYYYMMDD格式
+                    df['date'] = pd.to_datetime(df['date'], format='%Y%m%d')
                 else:
-                    df['time'] = pd.to_datetime(df['time'])
-                df.set_index('time', inplace=True)
+                    df['date'] = pd.to_datetime(df['date'])
+            df.set_index('date', inplace=True)
+        elif 'time' in df.columns:
+            # 时间戳格式
+            if df['time'].dtype in ['int64', 'float64']:
+                df['time'] = pd.to_datetime(df['time'], unit='ms')
+            else:
+                df['time'] = pd.to_datetime(df['time'])
+            df.set_index('time', inplace=True)
             
             # 确保数值列的数据类型正确
             numeric_columns = ['open', 'high', 'low', 'close', 'volume', 'amount']
@@ -196,12 +201,33 @@ def demo_basic_kline_analysis():
     end_date = "2023-12-31"
     frequency = "1d"
     
-    # 获取数据
-    kline_df = get_hist_kline_data(symbol, start_date, end_date, frequency)
-    
-    if not kline_df.empty:
+    try:
+        # 获取数据
+        kline_df = get_hist_kline_data(symbol, start_date, end_date, frequency)
+        
+        # 如果数据为空，创建一个示例数据框
+        if kline_df.empty:
+            print("  未获取到实际数据，创建示例数据用于演示")
+            # 创建示例数据
+            dates = pd.date_range(start=start_date, end=end_date, freq='B')
+            data = {
+                'open': [100 + i*0.1 for i in range(len(dates))],
+                'high': [101 + i*0.1 for i in range(len(dates))],
+                'low': [99 + i*0.1 for i in range(len(dates))],
+                'close': [100.5 + i*0.1 for i in range(len(dates))],
+                'volume': [1000000 + i*1000 for i in range(len(dates))],
+                'amount': [100000000 + i*100000 for i in range(len(dates))]
+            }
+            kline_df = pd.DataFrame(data, index=dates)
+        
         # 显示数据摘要
         display_kline_summary(kline_df, symbol)
+        
+        return kline_df
+    except Exception as e:
+        print(f"  分析过程中出错: {str(e)}")
+        # 返回一个空的DataFrame，但带有正确的列
+        return pd.DataFrame(columns=['open', 'high', 'low', 'close', 'volume', 'amount'])
         
         # 计算技术指标
         print_subsection_header("技术指标计算")
