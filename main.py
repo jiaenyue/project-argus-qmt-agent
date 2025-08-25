@@ -1,3 +1,18 @@
+# -*- coding: utf-8 -*-
+# ---
+# jupyter:
+#   jupytext:
+#     text_representation:
+#       extension: .py
+#       format_name: light
+#       format_version: '1.5'
+#       jupytext_version: 1.14.1
+#   kernelspec:
+#     display_name: Python 3
+#     language: python
+#     name: python3
+# ---
+
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
@@ -49,19 +64,12 @@ def start_direct():
         main()
     except ImportError as e:
         print(f"导入 xtquantai 失败: {e}")
-        print("尝试启动备选服务器...")
-        try:
-            # 尝试启动 server_direct.py
-            if os.path.exists("server_direct.py"):
-                print("找到 server_direct.py，启动独立服务器...")
-                subprocess.run([sys.executable, "server_direct.py"], check=True)
-            else:
-                print("未找到 server_direct.py，无法启动服务器")
-                print("请确保已安装 xtquantai 包或当前目录包含 xtquantai 源代码")
-                sys.exit(1)
-        except Exception as e:
-            print(f"启动备选服务器失败: {e}")
-            sys.exit(1)
+        print("错误：无法启动服务器，请确保：")
+        print("1. 已正确安装 xtquantai 包")
+        print("2. miniQMT 客户端已安装并正确配置")
+        print("3. 当前目录包含正确的 xtquantai 源代码")
+        print("项目不再支持模拟模式或回退机制，必须连接真实的 miniQMT 服务")
+        sys.exit(1)
 
 def start_with_inspector(python_path=None, venv_path=None):
     """通过 MCP Inspector 启动 xtquantai 服务器"""
@@ -124,4 +132,4 @@ def main():
             start_direct()
 
 if __name__ == "__main__":
-    main() 
+    main()

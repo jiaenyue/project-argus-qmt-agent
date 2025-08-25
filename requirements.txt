@@ -1,8 +1,28 @@
-  
-  
-fastapi  
-uvicorn[standard]  
-httpx # Required by TestClient  
-xtquant # Added for xtdata functionality  
-
+fastapi
+uvicorn[standard]
+httpx
+xtquant
 chardet
+jupytext
+notebook
+tushare
+python-dotenv
+rqdatac
+# 监控和指标相关依赖
+psutil
+# 时间处理
+python-dateutil
+# 数据库相关
+sqlalchemy>=2.0.0
+# 性能优化相关
+aiofiles>=23.0.0
+cachetools>=5.3.0
+
+# MCP服务器相关依赖
+aiohttp>=3.8.0
+pydantic>=2.0.0
+typing-extensions>=4.0.0
+# 异步支持
+asyncio-mqtt>=0.11.0
+# JSON处理
+orjson>=3.8.0

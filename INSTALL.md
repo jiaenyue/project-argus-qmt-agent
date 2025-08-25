@@ -5,8 +5,8 @@
 ## 先决条件
 
 *   **Windows 操作系统:** `xtquant` 通常依赖于 Windows 环境下的 miniQMT 客户端。
-*   **Python:** 版本 3.11 或更高。您可以使用 `pyenv` 管理 Python 版本，或从 [python.org](https://www.python.org/downloads/) 下载。
-*   **miniQMT 客户端 (迅投量化交易终端):** 如果您打算使用实时的 `xtquant` 数据，则必须在同一台 Windows 机器上安装并运行 miniQMT。对于不依赖实时数据的测试或开发，使用模拟的 `xtdata` 可能已足够。
+*   **Python:** 版本 3.10.18 (推荐使用Conda环境管理)。您可以使用 `pyenv` 管理 Python 版本，或从 [python.org](https://www.python.org/downloads/) 下载。
+*   **miniQMT 客户端 (迅投量化交易终端):** **必须**在同一台 Windows 机器上安装并运行 miniQMT。这是项目运行的强制要求，项目已移除所有模拟数据支持。
 *   **`xtquant` 库:**
     *   此库通常随 miniQMT 客户端提供。如果环境中未找到 `xtquant`，应用程序会尝试从 PyPI 安装它，但 PyPI上的版本可能与您的 QMT 客户端版本不完全兼容，或缺少某些功能。
     *   **验证:** 在您的 Python 环境中，尝试执行 `python -c "from xtquant import xtdata; print(xtdata)"`。如果命令无错误运行，则表示 `xtquant` 可用。
@@ -24,15 +24,24 @@
     cd project-argus-qmt-agent
     ```
 
-2.  **创建 Python 虚拟环境 (推荐):**
-    在项目根目录下打开终端。
-    ```bash
-    python -m venv qmt_env
-    ```
-    *   激活虚拟环境:
-        *   Windows CMD: `qmt_env\\Scripts\\activate.bat`
-        *   Windows PowerShell: `.\\qmt_env\\Scripts\\Activate.ps1`
-        *   Linux/macOS (如适用): `source qmt_env/bin/activate`
+2.  **设置 Python 环境:**
+    **推荐使用 Conda 环境管理:**
+    
+    1. **激活现有的 Conda 环境:**
+       ```bash
+       conda activate qmt_py310
+       ```
+    
+    2. **或使用提供的批处理脚本:**
+       ```bash
+       activate_env.bat
+       ```
+    
+    **备选方案 - 创建新的虚拟环境 (不推荐):**
+       ```bash
+       python -m venv qmt_env
+       qmt_env\\Scripts\\activate
+       ```
 
 3.  **安装依赖:**
     激活虚拟环境后，安装所需的 Python 包：
@@ -55,7 +64,7 @@
 请确保您已导航到项目根目录，并已激活虚拟环境。
 
 *   **自动模式 (推荐):**
-    此模式会优先尝试使用 MCP Inspector (如果 Node.js/npx 可用)，否则将回退到直接模式。
+    此模式会优先尝试使用 MCP Inspector (如果 Node.js/npx 可用)，否则将使用直接模式。
     ```bash
     python main.py
     ```
@@ -65,11 +74,11 @@
     ```bash
     python main.py --mode direct
     ```
-    您可以指定端口 (回退的 `server_direct.py` 默认为 8000，但 `src/xtquantai/server.py` 中的 MCP 服务器通常通过 MCP 配置管理端口)：
+    您可以指定端口：
     ```bash
     python main.py --mode direct --port 8001
     ```
-    *(注意: `main.py` 中的 `--port` 参数主要用于旧版 `server_direct.py` 回退。`src/xtquantai/server.py` 中的主 MCP 服务器的 HTTP 端口通常由 MCP 框架配置或管理)。*
+    *(注意: `src/xtquantai/server.py` 中的 MCP 服务器的 HTTP 端口通常由 MCP 框架配置或管理)。*
 
 *   **MCP Inspector 模式 (需要 Node.js 和 npx):**
     ```bash

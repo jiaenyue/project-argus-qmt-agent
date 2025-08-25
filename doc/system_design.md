@@ -43,7 +43,7 @@ D --> E[MCP适配层]
         - (未来可选) 可考虑集成更复杂的认证机制如 OAuth2，若需支持用户级别授权或更细粒度的权限控制。
     - **数据缓存 (初步策略)**:
         - **交易日历等静态数据**: 首次获取后可进行内存缓存，设置合理的过期时间 (如每日更新)。
-        - **频繁请求的K线/快照**: 可考虑引入轻量级缓存 (如 `cachetools` 或 Redis)，降低对 QMT 的请求压力，提高响应速度。缓存周期需根据数据更新频率设定。
+        - **频繁请求的K线/快照**: 可考虑引入轻量级缓存 (如 `cachetools` 本地内存缓存)，降低对 QMT 的请求压力，提高响应速度。缓存周期需根据数据更新频率设定。
     - **流控与限速**: 防止恶意或错误的客户端请求导致过载。FastAPI 可集成相关中间件实现基于IP或API Key的请求频率限制。
 
 **集成 Argus 方式示例 (与 `doc/user_story.md` 中的API路径对齐)**：
@@ -111,17 +111,17 @@ graph TD
         QMT[miniQMT Client]
         AGENT[QMT Data Agent (Python FastAPI on port 8000)]
     end
-    subgraph "Docker Environment / Other Systems"
+    subgraph "Project Argus Core System"
         ARGUS[Project Argus Core]
-        KAFKA[(Kafka)]
-        AIRFLOW[(Airflow)]
+        CACHE[(Data Cache)]
+        SCHEDULER[(Task Scheduler)]
         OTHER_CONSUMERS[Other API Consumers]
     end
     QMT --> AGENT
     AGENT -- HTTP(S) --> ARGUS
     AGENT -- HTTP(S) --> OTHER_CONSUMERS
-    ARGUS --> KAFKA
-    ARGUS --> AIRFLOW
+    ARGUS --> CACHE
+    ARGUS --> SCHEDULER
 ```
 
 ### 配置要求
@@ -137,7 +137,7 @@ graph TD
     *   数据代理服务绑定的端口 (默认为 `8000`，可通过环境变量 `QMT_DATA_AGENT_PORT` 配置) 必须在 Windows 防火墙中开放。
     *   Project Argus 核心系统或其他API消费者必须能够通过网络访问到运行数据代理的 Windows 主机的 IP 地址和指定端口。
 3.  **安全**:
-    *   **HTTPS**: 在生产环境中，强烈建议为API服务配置HTTPS加密传输。这通常涉及获取SSL证书并在 `uvicorn` 或反向代理 (如Nginx) 中配置。
+    *   **HTTPS**: 在生产环境中，强烈建议为API服务配置HTTPS加密传输。这通常涉及获取SSL证书并在 `uvicorn` 或Windows IIS反向代理中配置。
     -   **API Key**: `X-API-Key` 必须妥善管理和轮换。密钥应具有足够的复杂度。
     *   **主机安全**: 运行数据代理的 Windows 主机应遵循标准安全实践 (如最小权限原则、及时更新补丁等)。
 
@@ -148,7 +148,7 @@ graph TD
     - **访问日志**: 记录所有API请求的概要信息 (请求路径、方法、客户端IP、响应状态码、处理时间)。`uvicorn` 提供访问日志功能。
     - **应用日志**: 记录服务启动/关闭、`xtquant` 交互 (如连接QMT成功/失败、数据获取开始/结束)、错误和异常 (包括完整的堆栈跟踪)、重要业务逻辑执行情况。
     - **`xtquant` 日志**: `xtquant` 库本身可能产生日志，需配置收集。
-- **日志格式**: 建议采用结构化日志 (如JSON格式)，方便后续的收集、查询和分析 (例如通过ELK Stack或Splunk)。
+- **日志格式**: 建议采用结构化日志 (如JSON格式)，方便后续的收集、查询和分析 (例如通过日志管理系统)。
 - **日志级别**: 支持标准日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)。生产环境通常配置为 INFO 或 WARNING 级别。
 - **日志输出**: 可配置输出到控制台 (开发环境) 和/或文件 (生产环境)。日志文件应支持按大小或时间进行轮转。
 
@@ -159,8 +159,8 @@ graph TD
     - **API性能**: 平均响应时间、p95/p99响应时间、请求吞吐量 (QPS)。
     - **`xtquant`交互**: 与QMT的连接状态、`xtquant`调用成功率/失败率、数据获取延迟。
 - **监控工具**:
-    - **Prometheus**: 可通过 FastAPI 中间件暴露metrics端点，供Prometheus采集。
-    - **Grafana**: 用于可视化Prometheus采集的指标，创建仪表盘。
+    - **监控系统**: 可通过 FastAPI 中间件暴露metrics端点，供监控系统采集。
+    - **监控仪表盘**: 用于可视化采集的指标，创建仪表盘。
     - **Windows性能监视器**: 用于监控主机级别的系统资源。
 - **告警**:
     - 当关键指标超出预设阈值时 (如错误率过高、响应时间过长、QMT连接断开)，应能通过邮件、短信或其他即时通讯工具发送告警。

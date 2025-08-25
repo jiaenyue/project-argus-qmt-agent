@@ -30,10 +30,10 @@ graph TD
     end
     
     subgraph 基础设施
-        I1[Airflow] -->|调度| B
-        I2[Prometheus] -->|指标采集| M1
-        I3[Great Expectations] -->|规则引擎| M2
-        I4[ELK] -->|日志分析| M3
+        I1[任务调度器] -->|调度| B
+        I2[监控系统] -->|指标采集| M1
+        I3[数据质量检查] -->|规则引擎| M2
+        I4[日志系统] -->|日志分析| M3
     end
 ```
 
@@ -84,25 +84,22 @@ SOURCE_PRIORITY = {
 
 | 任务ID | 任务描述 | 关键成果 | 验证点 |
 |--------|----------|----------|--------|
-| P2.1 | 基础环境配置 | Docker/K8s环境 | 容器化部署 |
+| P2.1 | 基础环境配置 | Windows环境 | 服务部署 |
 | P2.2 | Tushare接入测试 | API测试报告 | 数据获取成功率>99.5% |
-| P2.3 | 质量框架集成 | GE初始规则集 | 50+基础规则 |
+| P2.3 | 质量框架集成 | 质量检查规则集 | 50+基础规则 |
 | P2.4 | 端到端原型验证 | PoC报告 | 双源数据融合验证 |
 
 **环境配置清单**：
-```bash
+```powershell
 # 核心服务
-docker-compose up -d \
-  airflow-scheduler \
-  prometheus \
-  grafana \
-  elasticsearch \
-  kibana \
-  tushare-proxy  # 新增Tushare代理服务
+# 启动Windows服务
+Start-Service -Name "ArgusDataAgent"
+Start-Service -Name "ArgusTaskScheduler"
+Start-Service -Name "ArgusMonitoring"
+Start-Service -Name "ArgusTushareProxy"  # 新增Tushare代理服务
 
 # Python依赖
-pip install tushare pyarrow great-expectations \
-  pandas numpy scipy statsmodels  # 新增数据分析库
+pip install tushare pyarrow pandas numpy scipy statsmodels  # 数据分析库
 ```
 
 ### 阶段3：数据管道核心开发（17天）
@@ -117,7 +114,7 @@ pip install tushare pyarrow great-expectations \
 | 数据融合引擎 | 开发 | DataFusionEngine | 优先级决策树 |
 | Silver处理器 | 开发 | EnhancedProcessor | 机器学习填补 |
 | Tushare适配器 | 开发 | TushareAdapter | 智能配额管理 |
-| 质量规则库 | DQA | GE规则集 | 120+规则 |
+| 质量规则库 | DQA | 质量检查规则集 | 120+规则 |
 
 **Silver层处理流程**：
 ```python
@@ -164,52 +161,59 @@ class EnhancedSilverProcessor:
 
 | 组件 | 负责人 | 交付物 | 监控指标 |
 |------|--------|--------|----------|
-| Airflow DAG | 开发 | 工作流定义 | 任务成功率 |
-| Grafana仪表盘 | DQA | 质量看板 | 多源一致性率 |
+| Windows任务调度器 | 开发 | 工作流定义 | 任务成功率 |
+| 简单Web界面 | DQA | 质量看板 | 多源一致性率 |
 | 告警系统 | 运维 | 告警规则集 | 5分钟响应 |
 | 异常处理 | 团队 | SOP手册 | 自动修复率 |
 
-**增强版Airflow DAG**：
+**增强版任务调度定义**：
 ```python
-with DAG('golden_data_pipeline', schedule_interval='@daily') as dag:
-    # 数据采集
-    qmt_extract = PythonOperator(task_id='extract_qmt')
-    tushare_extract = PythonOperator(task_id='extract_tushare')
+import schedule
+import time
+from datetime import datetime
+from data_quality_checker import QualityChecker
+
+# 任务调度配置
+class EnhancedSilverPipeline:
+    def __init__(self):
+        self.quality_checker = QualityChecker()
+        self.setup_schedule()
     
-    # Bronze层质量门禁
-    bronze_gate = MultiSourceValidator(task_id='bronze_validation')
+    def setup_schedule(self):
+        # 工作日18:00执行
+        schedule.every().monday.at("18:00").do(self.run_pipeline)
+        schedule.every().tuesday.at("18:00").do(self.run_pipeline)
+        schedule.every().wednesday.at("18:00").do(self.run_pipeline)
+        schedule.every().thursday.at("18:00").do(self.run_pipeline)
+        schedule.every().friday.at("18:00").do(self.run_pipeline)
     
-    # Silver层处理
-    transform = PythonOperator(task_id='enhance_data')
+    def run_pipeline(self):
+        try:
+            # 数据采集任务
+            qmt_data = self.extract_qmt_data()
+            tushare_data = self.extract_tushare_data()
+            
+            # 质量门控
+            if not self.bronze_quality_gate([qmt_data, tushare_data]):
+                raise Exception("Bronze质量检查失败")
+            
+            # 数据处理
+            transformed_data = self.enhanced_silver_transform(qmt_data, tushare_data)
+            
+            # Silver质量门控
+            if not self.silver_quality_gate(transformed_data):
+                self.handle_data_failure()
+                return
+            
+            # 数据加载
+            self.load_to_gold_layer(transformed_data)
+            
+        except Exception as e:
+            self.handle_failure(e)
     
-    # Silver层质量门禁（含多源检查）
-    silver_gate = GreatExpectationsOperator(
-        task_id='silver_quality_gate',
-        checkpoint_name='silver_multisource_checkpoint'
-    )
-    
-    # Gold层存储
-    load = PythonOperator(task_id='load_to_parquet')
-    
-    # 异常处理分支
-    handle_failure = BranchPythonOperator(task_id='handle_failure')
-    repair_pipeline = PythonOperator(task_id='trigger_repair')
-    alert_team = PythonOperator(task_id='notify_team')
-    
-    # 工作流定义
-    [qmt_extract, tushare_extract] >> bronze_gate >> transform
-    transform >> silver_gate >> load
-    
-    # 异常处理路径
-    silver_gate >> handle_failure
-    handle_failure >> [repair_pipeline, alert_team] >> load
-    
-    # 数据源切换逻辑
-    repair_pipeline >> switch_source = PythonOperator(
-        task_id='switch_data_source',
-        python_callable=switch_data_source,
-        trigger_rule='one_success'
-    )
+    def handle_failure(self, error):
+        self.notify_team(error)
+        self.switch_data_source()
 ```
 
 ### 阶段5：测试与上线（8天）
@@ -294,7 +298,7 @@ graph LR
 ```
 
 ### 质量看板设计
-**Grafana多源监控面板**：
+**监控仪表盘设计**：
 
 | 面板组 | 核心指标 | 可视化形式 | 告警阈值 |
 |--------|----------|------------|----------|

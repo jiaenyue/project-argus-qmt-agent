@@ -54,14 +54,14 @@ Tushare的集成将无缝融入 **`SystemDesign.md (V2.0)`** 定义的事件驱�
 
 ```mermaid
 sequenceDiagram
-    participant Airflow as "控制平面<br>Apache Airflow"
+    participant TaskScheduler as "控制平面<br>Windows任务调度器"
     participant Collector as "采集层<br>智能数据采集器"
     participant Gateway as "接入层<br>API Gateway"
-    participant Kafka as "消息总线<br>raw_data_topic"
+    participant FileQueue as "消息总线<br>本地文件队列"
     participant SilverProc as "处理层<br>Silver Processor"
     participant Tushare as "外部源<br>Tushare Pro API"
 
-    Airflow->>Collector: 触发采集任务 (e.g., 'collect_financials')
+    TaskScheduler->>Collector: 触发采集任务 (e.g., 'collect_financials')
     Collector->>Collector: <b>调用 TushareAdapter</b><br>1. 读取配置中心，确认Tushare为数据源<br>2. 检查配额
     alt 配额充足
         Collector->>Gateway: 发起API请求 (e.g., GET /tushare/daily_basic)
@@ -69,25 +69,25 @@ sequenceDiagram
         Tushare-->>Gateway: 返回原始数据 (JSON)
         Gateway-->>Collector: 返回Tushare响应
         Collector->>Collector: <b>格式化为标准事件</b><br>附加元数据 (source: Tushare)
-        Collector->>Kafka: 发布标准数据事件
+        Collector->>FileQueue: 发布标准数据事件
     else 配额耗尽或API异常
-        Collector->>Airflow: 报告异常，触发告警/故障转移
+        Collector->>TaskScheduler: 报告异常，触发告警/故障转移
     end
 
-    Note right of Kafka: 数据进入下游融合处理流程
-    Kafka->>SilverProc: 消费Tushare数据事件
+    Note right of FileQueue: 数据进入下游融合处理流程
+FileQueue->>SilverProc: 消费Tushare数据事件
     SilverProc->>SilverProc: 执行数据融合、清洗、验证
 ```
 
 #### 2.2 关键组件说明
 | 组件 | 职责 | 技术实现 / 关联模块 |
 | :--- | :--- | :--- |
-| **API网关** | 统一入口、认证、路由、限流、熔断。 | Kong / Nginx / 自研网关 |
+| **API网关** | 统一入口、认证、路由、限流、熔断。 | Windows IIS / 自研网关 |
 | **Tushare适配器** | **核心模块**。封装API调用、重试、配额管理、数据转换。 | 详见3.1节，Python类 |
-| **智能配额管理器** | 监控配额，动态决策，支持分布式。 | 详见3.2节，Python类 + Redis |
-| **配置中心** | 存储API Token、优先级、配额限制、重试策略。 | Consul / Nacos |
+| **智能配额管理器** | 监控配额，动态决策，支持本地存储。 | 详见3.2节，Python类 + 本地文件 |
+| **配置中心** | 存储API Token、优先级、配额限制、重试策略。 | 本地配置文件 / Windows注册表 |
 | **多源一致性检查** | 在Silver层比对QMT与Tushare重叠数据。 | 详见4.2节，自定义校验器 |
-| **监控与告警** | 实时采集API指标、配额使用率并告警。 | Prometheus + Grafana + Alertmanager |
+| **监控与告警** | 实时采集API指标、配额使用率并告警。 | Windows Performance Counters + 简单Web界面 + Windows事件日志 |
 
 ### 3. 详细设计
 
@@ -106,7 +106,7 @@ classDiagram
     }
     class QuotaManager {
         - dict limits
-        - RedisClient redis
+        - FileStorage file_storage
         + is_available(endpoint) : bool
         + record_usage(endpoint)
         + get_usage_ratio(endpoint) : float
@@ -131,13 +131,35 @@ classDiagram
 ```python
 # 伪代码 - QuotaManager
 class TushareQuotaManager:
-    def __init__(self, limits: dict, redis_conn):
+    def __init__(self, limits: dict, file_storage):
         self.limits = limits
-        self.redis = redis_conn # 使用Redis持久化当日用量，支持分布式
+        self.file_path = "quota_usage.json"  # 使用本地文件持久化当日用量
         self.KEY_PREFIX = "tushare:quota:usage:"
+        self._load_usage()
+
+    def _load_usage(self):
+        """从本地文件加载配额使用情况"""
+        try:
+            if os.path.exists(self.file_path):
+                with open(self.file_path, 'r') as f:
+                    self.usage_data = json.load(f)
+            else:
+                self.usage_data = {}
+        except Exception:
+            self.usage_data = {}
+
+    def _save_usage(self):
+        """保存配额使用情况到本地文件"""
+        try:
+            with open(self.file_path, 'w') as f:
+                json.dump(self.usage_data, f)
+        except Exception:
+            pass
 
     def is_available(self, endpoint: str) -> bool:
-        usage = int(self.redis.get(f"{self.KEY_PREFIX}{endpoint}") or 0)
+        today = datetime.now().strftime('%Y-%m-%d')
+        key = f"{self.KEY_PREFIX}{endpoint}:{today}"
+        usage = self.usage_data.get(key, 0)
         limit = self.limits.get(endpoint, float('inf'))
         
         if usage >= limit:
@@ -150,9 +172,10 @@ class TushareQuotaManager:
         return True
 
     def record_usage(self, endpoint: str):
-        key = f"{self.KEY_PREFIX}{endpoint}"
-        self.redis.incr(key)
-        self.redis.expire(key, 24 * 3600) # 设置24小时过期
+        today = datetime.now().strftime('%Y-%m-%d')
+        key = f"{self.KEY_PREFIX}{endpoint}:{today}"
+        self.usage_data[key] = self.usage_data.get(key, 0) + 1
+        self._save_usage()
 ```
 
 #### 3.3 数据源优先级与配额配置 (存于配置中心)
@@ -186,7 +209,7 @@ quota_limits:
 ### 4. 数据质量保障
 
 #### 4.1 采集层质量验证规则 (Great Expectations)
-在数据被写入Kafka前，进行初步校验。
+在数据被写入本地文件队列前，进行初步校验。
 ```json
 {
   "expectation_suite_name": "tushare_raw_validation",
@@ -240,7 +263,7 @@ graph TD
     B -- No --> D[任务失败，发送P1告警]
     C --> E["Silver层融合引擎<br>仅使用miniQMT数据"]
     E --> F[数据管道继续运行，但有告警]
-    F --> G["Grafana看板<br>显示数据源降级"]
+    F --> G["简单Web界面<br>显示数据源降级"]
 ```
 
 ### 6. 安全设计
@@ -248,64 +271,63 @@ graph TD
 #### 6.1 安全控制措施
 | 安全领域 | 控制措施 | 实施方式 |
 | :--- | :--- | :--- |
-| **认证** | **动态短期凭证**，Token轮换 | Vault / K8s Secrets + API网关 |
+| **认证** | **动态短期凭证**，Token轮换 | Windows凭证管理 + API网关 |
 | **授权** | IP白名单，最小权限原则 | API网关配置，Tushare后台设置 |
 | **传输安全** | 端到端TLS 1.3加密 | 全链路HTTPS通信 |
-| **凭证存储** | **严禁硬编码**，使用安全存储 | K8s Secrets注入环境变量 |
-| **审计** | 完整、不可变的访问日志 | ELK/Loki集中存储与分析 |
+| **凭证存储** | **严禁硬编码**，使用安全存储 | Windows凭证管理器注入环境变量 |
+| **审计** | 完整、不可变的访问日志 | Windows事件日志存储与分析 |
 
 #### 6.2 凭证管理流程
 ```mermaid
 sequenceDiagram
-    participant Pod as 采集服务Pod
-    participant K8s as Kubernetes API
+    participant Service as 采集服务
+    participant WinCred as Windows凭证管理器
     participant Tushare as Tushare Pro API
 
-    K8s->>Pod: 启动时注入环境变量 TUSHARE_TOKEN (来自Secret)
-    Pod->>Pod: TushareAdapter 读取环境变量获取Token
-    Pod->>Tushare: 使用Token调用API
-    Tushare-->>Pod: 返回数据
+    WinCred->>Service: 启动时注入环境变量 TUSHARE_TOKEN
+    Service->>Service: TushareAdapter 读取环境变量获取Token
+    Service->>Tushare: 使用Token调用API
+    Tushare-->>Service: 返回数据
 ```
 
 ### 7. 性能优化
 
 #### 7.1 性能优化策略
 1.  **批量请求优化**: 对支持批量查询的接口（如`daily_basic`），将单日所有股票代码拼接成一个请求，减少网络往返。
-2.  **缓存策略**: 对不经常变化的元数据（如股票列表`stock_basic`），使用Redis进行日级缓存。
+2.  **缓存策略**: 对不经常变化的元数据（如股票列表`stock_basic`），使用本地内存缓存进行日级缓存。
 3.  **连接池管理**: `TushareAdapter`中使用`requests.Session`和`HTTPAdapter`复用TCP连接。
-4.  **并发采集**: Airflow DAG中可使用`KubernetesPodOperator`启动多个并行的采集Pod，分别采集不同类型的数据（如财务、行情），提高总体吞吐量。
+4.  **并发采集**: Windows任务调度器中可使用多个并行的采集进程，分别采集不同类型的数据（如财务、行情），提高总体吞吐量。
 
 #### 7.2 性能指标目标
 | 指标 | 目标值 | 监控频率 |
 | :--- | :--- | :--- |
 | API P95响应时间 | < 2s | 实时 |
-| 数据采集吞吐量 | > 5000条记录/分钟/Pod | 每日 |
+| 数据采集吞吐量 | > 5000条记录/分钟/进程 | 每日 |
 | API错误率 | < 0.1% | 每小时 |
 | 配额日使用率 | < 90% (正常情况) | 实时 |
 
 ### 8. 部署与运维
 
-#### 8.1 部署架构 (K8s)
+#### 8.1 部署架构 (Windows环境)
 ```mermaid
 graph LR
-    subgraph K8s集群
-        subgraph 数据管道命名空间
-            A[Airflow Scheduler] --> C1; A --> C2
-            C1["采集Pod 1<br>(行情)"] -- 数据 --> K[Kafka]
-            C2["采集Pod 2<br>(财务)"] -- 数据 --> K
-            CM["ConfigMap/Secrets<br>(配置/凭证)"]-.->C1; CM-.->C2
+    subgraph Windows服务器
+        subgraph 数据管道服务
+            A[Windows任务调度器] --> C1; A --> C2
+            C1["采集进程 1<br>(行情)"] -- 数据 --> LQ[本地文件队列]
+            C2["采集进程 2<br>(财务)"] -- 数据 --> LQ
+            CM["配置文件<br>(配置/凭证)"]-.->C1; CM-.->C2
         end
         
-        subgraph 监控命名空间
-            P[Prometheus] -- 抓取 --> C1; P -- 抓取 --> C2
-            P --> AL[Alertmanager]
-            AL -- 告警 --> OpsTeam
-            G[Grafana] -- 查询 --> P
+        subgraph 监控服务
+            WPC[Windows Performance Counters] -- 监控 --> C1; WPC -- 监控 --> C2
+            WEL[Windows事件日志] -- 告警 --> OpsTeam
+            WebUI[简单Web监控界面] -- 查询 --> WPC
         end
     end
 ```
 
-#### 8.2 监控仪表盘 (Grafana) - Tushare专项
+#### 8.2 监控仪表盘 (简单Web界面) - Tushare专项
 *   **API健康度**: 各接口请求成功率、错误率（分状态码）、P95延迟。
 *   **配额状态**: 各接口配额实时使用率（进度条）、预计耗尽时间。
 *   **数据量**: 各接口采集的数据记录数。
@@ -315,9 +337,9 @@ graph LR
 | 阶段 | 时间 | 里程碑 | 关键交付物 |
 | :--- | :--- | :--- | :--- |
 | **1. 基础接入** | 第1周 | `TushareAdapter`与配额管理模块完成。 | 可独立运行的采集脚本、单元测试。 |
-| **2. 行情备份** | 第2周 | 行情数据采集与故障转移逻辑集成。 | 更新后的Airflow DAG、多源一致性检查模块。 |
+| **2. 行情备份** | 第2周 | 行情数据采集与故障转移逻辑集成。 | 更新后的Windows任务调度器配置、多源一致性检查模块。 |
 | **3. 数据补充** | 第3周 | 财务、公司行动数据接入与融合。 | 扩展后的Gold层Schema、更新的Silver层处理器。 |
-| **4. 监控与优化**| 第4周 | Grafana看板与告警规则部署。 | 监控仪表盘URL、告警SOP。 |
+| **4. 监控与优化**| 第4周 | 简单Web监控界面与告警规则部署。 | 监控仪表盘URL、告警SOP。 |
 | **5. 上线与稳定**| 第5周 | 全功能上线，进入观察期。 | 最终版部署脚本、运维手册。 |
 
 ### 10. 风险管理

@@ -1,0 +1,262 @@
+# Prometheus 告警规则 - WebSocket 实时数据系统
+
+groups:
+  # WebSocket 服务器告警
+  - name: websocket-server
+    rules:
+      # 服务可用性告警
+      - alert: WebSocketServerDown
+        expr: up{job="websocket-server"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          service: websocket-server
+        annotations:
+          summary: "WebSocket服务器不可用"
+          description: "WebSocket服务器 {{ $labels.instance }} 已经下线超过30秒"
+
+      # 连接数告警
+      - alert: HighConnectionCount
+        expr: websocket_active_connections > 800
+        for: 2m
+        labels:
+          severity: warning
+          service: websocket-server
+        annotations:
+          summary: "WebSocket连接数过高"
+          description: "WebSocket服务器 {{ $labels.instance }} 当前连接数 {{ $value }}，超过阈值800"
+
+      - alert: CriticalConnectionCount
+        expr: websocket_active_connections > 950
+        for: 1m
+        labels:
+          severity: critical
+          service: websocket-server
+        annotations:
+          summary: "WebSocket连接数严重过高"
+          description: "WebSocket服务器 {{ $labels.instance }} 当前连接数 {{ $value }}，接近最大限制1000"
+
+      # 消息处理告警
+      - alert: HighMessageLatency
+        expr: websocket_message_processing_duration_seconds{quantile="0.95"} > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: websocket-server
+        annotations:
+          summary: "消息处理延迟过高"
+          description: "WebSocket服务器 {{ $labels.instance }} 95%消息处理延迟 {{ $value }}s，超过100ms"
+
+      - alert: MessageProcessingErrors
+        expr: rate(websocket_message_errors_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          service: websocket-server
+        annotations:
+          summary: "消息处理错误率过高"
+          description: "WebSocket服务器 {{ $labels.instance }} 消息错误率 {{ $value }}/s，超过阈值"
+
+      # 内存使用告警
+      - alert: HighMemoryUsage
+        expr: (process_resident_memory_bytes{job="websocket-server"} / 1024 / 1024) > 400
+        for: 5m
+        labels:
+          severity: warning
+          service: websocket-server
+        annotations:
+          summary: "内存使用过高"
+          description: "WebSocket服务器 {{ $labels.instance }} 内存使用 {{ $value }}MB，超过400MB"
+
+      # CPU使用告警
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total{job="websocket-server"}[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: websocket-server
+        annotations:
+          summary: "CPU使用率过高"
+          description: "WebSocket服务器 {{ $labels.instance }} CPU使用率 {{ $value }}%，超过80%"
+
+  # 负载均衡器告警
+  - name: load-balancer
+    rules:
+      - alert: LoadBalancerDown
+        expr: up{job="load-balancer"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          service: load-balancer
+        annotations:
+          summary: "负载均衡器不可用"
+          description: "负载均衡器 {{ $labels.instance }} 已经下线超过30秒"
+
+      - alert: NoHealthyNodes
+        expr: load_balancer_healthy_nodes == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: load-balancer
+        annotations:
+          summary: "没有健康的后端节点"
+          description: "负载均衡器 {{ $labels.instance }} 没有可用的健康节点"
+
+      - alert: HighRejectionRate
+        expr: rate(load_balancer_rejected_requests_total[5m]) > 1
+        for: 2m
+        labels:
+          severity: warning
+          service: load-balancer
+        annotations:
+          summary: "请求拒绝率过高"
+          description: "负载均衡器 {{ $labels.instance }} 请求拒绝率 {{ $value }}/s，超过阈值"
+
+  # 服务发现告警
+  - name: service-discovery
+    rules:
+      - alert: ConsulDown
+        expr: up{job="consul"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: consul
+        annotations:
+          summary: "Consul服务发现不可用"
+          description: "Consul服务 {{ $labels.instance }} 已经下线超过1分钟"
+
+      - alert: ServiceDiscoveryFailure
+        expr: consul_health_service_query_failures_total > 0
+        for: 2m
+        labels:
+          severity: warning
+          service: consul
+        annotations:
+          summary: "服务发现查询失败"
+          description: "Consul服务发现查询失败次数: {{ $value }}"
+
+  # 扩展管理告警
+  - name: scaling-manager
+    rules:
+      - alert: ScalingFailure
+        expr: increase(scaling_manager_scale_failures_total[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: scaling-manager
+        annotations:
+          summary: "自动扩展失败"
+          description: "扩展管理器在过去10分钟内发生 {{ $value }} 次扩展失败"
+
+      - alert: MaxInstancesReached
+        expr: scaling_manager_current_instances >= scaling_manager_max_instances
+        for: 5m
+        labels:
+          severity: warning
+          service: scaling-manager
+        annotations:
+          summary: "达到最大实例数"
+          description: "当前实例数 {{ $value }} 已达到最大限制，无法继续扩容"
+
+  # 系统资源告警
+  - name: system-resources
+    rules:
+      # 主机CPU告警
+      - alert: HighHostCPU
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "主机CPU使用率过高"
+          description: "主机 {{ $labels.instance }} CPU使用率 {{ $value }}%，超过85%"
+
+      # 主机内存告警
+      - alert: HighHostMemory
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "主机内存使用率过高"
+          description: "主机 {{ $labels.instance }} 内存使用率 {{ $value }}%，超过85%"
+
+      # 磁盘空间告警
+      - alert: HighDiskUsage
+        expr: (1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "磁盘使用率过高"
+          description: "主机 {{ $labels.instance }} 磁盘 {{ $labels.mountpoint }} 使用率 {{ $value }}%，超过85%"
+
+      # 磁盘IO告警
+      - alert: HighDiskIO
+        expr: rate(node_disk_io_time_seconds_total[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "磁盘IO使用率过高"
+          description: "主机 {{ $labels.instance }} 磁盘IO使用率 {{ $value }}%，超过80%"
+
+  # 网络告警
+  - name: network
+    rules:
+      - alert: HighNetworkTraffic
+        expr: rate(node_network_receive_bytes_total[5m]) + rate(node_network_transmit_bytes_total[5m]) > 100 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning
+          service: network
+        annotations:
+          summary: "网络流量过高"
+          description: "主机 {{ $labels.instance }} 网络接口 {{ $labels.device }} 流量 {{ $value | humanize }}B/s，超过100MB/s"
+
+      - alert: NetworkErrors
+        expr: rate(node_network_receive_errs_total[5m]) + rate(node_network_transmit_errs_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          service: network
+        annotations:
+          summary: "网络错误率过高"
+          description: "主机 {{ $labels.instance }} 网络接口 {{ $labels.device }} 错误率 {{ $value }}/s"
+
+  # 容器告警
+  - name: containers
+    rules:
+      - alert: ContainerDown
+        expr: up{job="cadvisor"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          service: containers
+        annotations:
+          summary: "容器监控不可用"
+          description: "容器监控服务 {{ $labels.instance }} 不可用"
+
+      - alert: ContainerHighCPU
+        expr: rate(container_cpu_usage_seconds_total{name!=""}[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: containers
+        annotations:
+          summary: "容器CPU使用率过高"
+          description: "容器 {{ $labels.name }} CPU使用率 {{ $value }}%，超过80%"
+
+      - alert: ContainerHighMemory
+        expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: containers
+        annotations:
+          summary: "容器内存使用率过高"
+          description: "容器 {{ $labels.name }} 内存使用率 {{ $value }}%，超过85%"

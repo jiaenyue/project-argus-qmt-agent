@@ -1,0 +1,103 @@
+# Prometheus 配置文件 - WebSocket 实时数据系统监控
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# 告警规则文件
+rule_files:
+  - "alert_rules.yml"
+
+# 告警管理器配置
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# 抓取配置
+scrape_configs:
+  # Prometheus 自身监控
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # WebSocket 服务器监控
+  - job_name: 'websocket-server'
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets:
+        - 'websocket-server-1:8080'
+        - 'websocket-server-2:8080'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: host
+        replacement: '${1}'
+
+  # 负载均衡器监控
+  - job_name: 'load-balancer'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets:
+        - 'load-balancer:8090'
+
+  # Consul 服务发现监控
+  - job_name: 'consul'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+        - 'consul:8500'
+    metrics_path: '/v1/agent/metrics'
+    params:
+      format: ['prometheus']
+
+  # Redis 监控
+  - job_name: 'redis'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+        - 'redis:6379'
+
+  # Node Exporter (系统指标)
+  - job_name: 'node-exporter'
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+        - 'node-exporter:9100'
+
+  # cAdvisor (容器指标)
+  - job_name: 'cadvisor'
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+        - 'cadvisor:8080'
+    metrics_path: '/metrics'
+
+  # 动态服务发现 (Consul)
+  - job_name: 'consul-services'
+    consul_sd_configs:
+      - server: 'consul:8500'
+        services: ['websocket-server']
+    relabel_configs:
+      - source_labels: [__meta_consul_service]
+        target_label: job
+      - source_labels: [__meta_consul_node]
+        target_label: instance
+      - source_labels: [__meta_consul_service_port]
+        target_label: port
+      - source_labels: [__meta_consul_service_address]
+        target_label: __address__
+        replacement: '${1}:8080'  # 监控端口
+
+# 远程写入配置 (可选)
+# remote_write:
+#   - url: "http://remote-storage:9201/write"
+
+# 远程读取配置 (可选)  
+# remote_read:
+#   - url: "http://remote-storage:9201/read"

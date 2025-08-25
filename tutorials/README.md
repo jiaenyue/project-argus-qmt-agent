@@ -82,16 +82,68 @@ python server_direct.py --port 8001
 
 ## 3. 教程目录
 
+### 3.1 教学文档体系
+
+本教程提供两种格式的教学文档：
+- **Python 文件** (`.py`): 可直接执行的教学脚本，位于 `tutorials/` 根目录
+- **Jupyter Notebook** (`.ipynb`): 交互式教学文档，位于 `tutorials/notebooks/` 目录
+
+### 3.2 核心教学模块
+
 按照学习顺序排列的教程文件：
 
-| 教程文件 | 功能描述 | 核心参数 | 难度 |
-|----------|----------|----------|------|
-| `01_trading_dates.py` | 交易日历查询 | market, start_date, end_date | ★☆☆ |
-| `02_hist_kline.py` | 历史 K 线数据 | symbol, start_date, end_date, frequency | ★★☆ |
-| `03_instrument_detail.py` | 合约详情查询 | symbol | ★☆☆ |
-| `04_stock_list.py` | 板块股票列表 | sector | ★★☆ |
-| `06_latest_market.py` | 最新行情数据 | symbols | ★★★ |
-| `07_full_market.py` | 完整行情数据 | symbol, fields | ★★★ |
+| 教程文件 | Python版本 | Notebook版本 | 功能描述 | 核心参数 | 难度 | 学习时间 |
+|----------|------------|-------------|----------|----------|------|----------|
+| 交易日历 | `01_trading_dates.py` | `notebooks/01_trading_dates.ipynb` | 交易日历查询 | market, start_date, end_date | ★☆☆ | 30-45分钟 |
+| 历史K线 | `02_hist_kline.py` | `notebooks/02_hist_kline.ipynb` | 历史 K 线数据 | symbol, start_date, end_date, frequency | ★★☆ | 45-60分钟 |
+| 合约详情 | `03_instrument_detail.py` | `notebooks/03_instrument_detail.ipynb` | 合约详情查询 | symbol | ★☆☆ | 30-40分钟 |
+| 股票列表 | `04_stock_list.py` | `notebooks/04_stock_list.ipynb` | 板块股票列表 | sector | ★★☆ | 50-70分钟 |
+| 最新行情 | `06_latest_market.py` | `notebooks/06_latest_market.ipynb` | 最新行情数据 | symbols | ★★★ | 60-80分钟 |
+| 完整行情 | `07_full_market.py` | `notebooks/07_full_market.ipynb` | 完整行情数据 | symbol, fields | ★★★ | 80-100分钟 |
+| WebSocket实时数据 | `08_websocket_realtime_data.py` | `notebooks/08_websocket_realtime_data.ipynb` | WebSocket实时数据订阅 | symbol, data_type | ★★★ | 60-90分钟 |
+| WebSocket与REST集成 | `09_websocket_rest_integration.py` | `notebooks/09_websocket_rest_integration.ipynb` | WebSocket与REST API集成 | symbols, data_sources | ★★★★ | 90-120分钟 |
+| WebSocket性能优化 | `10_websocket_performance_optimization.py` | `notebooks/10_websocket_performance_optimization.ipynb` | WebSocket性能优化技巧 | optimization_config | ★★★★ | 120-150分钟 |
+| WebSocket故障排除 | `11_websocket_troubleshooting_guide.py` | `notebooks/11_websocket_troubleshooting_guide.ipynb` | WebSocket调试和故障排除 | diagnostic_tools | ★★★ | 90-120分钟 |
+
+### 3.3 教学文档使用方式
+
+#### Python 文件执行
+```powershell
+# 直接运行教学脚本
+python tutorials/01_trading_dates.py
+
+# 或在虚拟环境中运行
+.\qmt_env\Scripts\Activate.ps1
+python tutorials/01_trading_dates.py
+```
+
+#### Jupyter Notebook 使用
+```powershell
+# 安装 Jupyter（如果尚未安装）
+pip install jupyter jupytext
+
+# 启动 Jupyter Notebook
+jupyter notebook tutorials/notebooks/
+
+# 或使用 JupyterLab（推荐）
+jupyter lab tutorials/notebooks/
+```
+
+#### 文件格式转换
+```powershell
+# Python 转 Notebook（开发者使用）
+jupytext --to ipynb tutorials/01_trading_dates.py --output tutorials/notebooks/01_trading_dates.ipynb
+
+# Notebook 转 Python（开发者使用）
+jupytext --to py tutorials/notebooks/01_trading_dates.ipynb --output tutorials/01_trading_dates.py
+```
+
+### 3.4 教学文档索引
+
+- **📚 教学索引**: `TUTORIAL_INDEX.md` - 完整的教学体系导航
+- **✅ 验证报告**: `VALIDATION_REPORT.md` - 教学文档验证结果
+- **🔧 故障排除**: `TROUBLESHOOTING.md` - 常见问题解决方案
+- **📖 使用说明**: `README.md` - 本文档
 
 ## 4. 学习路径建议
 
@@ -106,7 +158,16 @@ python server_direct.py --port 8001
 
 1. 学习 `06_latest_market.py`，掌握实时行情数据获取和处理
 2. 学习 `07_full_market.py`，掌握深度行情分析和大数据处理
-3. 探索 `common` 目录下的工具库，了解代码复用和模块化设计
+3. 学习 `08_websocket_realtime_data.py`，掌握WebSocket实时数据订阅
+4. 学习 `09_websocket_rest_integration.py`，掌握WebSocket与REST API的集成使用
+5. 探索 `common` 目录下的工具库，了解代码复用和模块化设计
+
+### 4.3 高级学习路径
+
+1. 学习 `10_websocket_performance_optimization.py`，掌握WebSocket性能优化技巧
+2. 学习 `11_websocket_troubleshooting_guide.py`，掌握WebSocket调试和故障排除
+3. 探索 `examples/` 目录下的实际应用示例
+4. 研究生产环境部署和运维最佳实践
 
 ## 5. 常见问题解答
 
@@ -131,14 +192,32 @@ set DATA_AGENT_SERVICE_URL=http://localhost:8001       # CMD
 
 ### 5.2 数据问题
 
-**Q: 模拟数据与实际数据差异大怎么办？**  
-A: 模拟数据仅用于连通性测试，请确保 API 服务正常连接 xtquant 数据源。如果需要更真实的模拟数据，可以修改 `common/mock_data.py` 中的生成逻辑。
+**Q: 教程运行时显示"无法获取数据"怎么办？**  
+A: 这表示API调用失败或数据源不可用。请检查：
+1. API服务是否正常运行（访问 http://localhost:8000/docs 验证）
+2. 网络连接是否稳定
+3. 数据源（如xtquant）是否正确配置
+4. 股票代码格式是否正确（需包含交易所后缀，如.SH或.SZ）
 
 **Q: 如何处理大量数据的性能问题？**  
 A: 参考 `07_full_market.py` 中的大数据处理优化部分，采用批处理、并行处理和数据缓存等技术。
 
 **Q: 如何验证数据的准确性？**  
 A: 可以将 API 返回的数据与 xtquant 直接调用的结果进行对比，确保数据一致性。
+
+**Q: 为什么项目不支持模拟数据？**  
+A: 项目已完全移除模拟数据支持，必须连接真实的miniQMT客户端。这样可以：
+1. 确保数据的真实性和准确性
+2. 避免模拟数据与实际数据的差异
+3. 提供真实的市场数据体验
+4. 确保用户学习到的是实际应用场景
+
+**Q: API调用返回空数据怎么办？**  
+A: 可能的原因和解决方案：
+1. **日期范围问题**：确保查询的日期范围内有交易日
+2. **股票代码错误**：验证股票代码是否存在且格式正确
+3. **数据权限问题**：确认是否有访问特定数据的权限
+4. **服务器时间问题**：检查服务器时间是否正确
 
 ### 5.3 环境问题
 
@@ -160,6 +239,110 @@ where python
 pip list
 # 应包含 xtquant 等包
 ```
+
+## 5.4 真实数据获取故障排除
+
+### 5.4.1 API配置问题
+
+**问题**: 教程运行时显示"API调用失败"
+**解决方案**:
+1. **检查API服务状态**:
+   ```powershell
+   # 检查服务是否运行
+   curl http://localhost:8000/api/v1/health
+   
+   # 或使用PowerShell
+   Invoke-WebRequest -Uri "http://localhost:8000/api/v1/health"
+   ```
+
+2. **验证API配置**:
+   ```python
+   # 在Python中测试基本连接
+   import requests
+   response = requests.get("http://localhost:8000/api/v1/health")
+   print(f"状态码: {response.status_code}")
+   print(f"响应: {response.text}")
+   ```
+
+3. **检查配置文件**:
+   - 确认 `common/config.py` 中的服务地址正确
+   - 检查环境变量 `DATA_AGENT_SERVICE_URL` 是否设置
+
+### 5.4.2 xtdata集成问题
+
+**问题**: xtdata相关功能无法正常工作
+**解决方案**:
+1. **验证xtdata安装**:
+   ```python
+   try:
+       from xtquant import xtdata
+       print("xtdata导入成功")
+   except ImportError as e:
+       print(f"xtdata导入失败: {e}")
+   ```
+
+2. **检查xtdata配置**:
+   - 确认xtdata客户端已正确安装
+   - 验证数据源连接配置
+   - 检查账户权限和数据订阅状态
+
+3. **测试xtdata连接**:
+   ```python
+   # 测试基本xtdata功能
+   try:
+       from xtquant import xtdata
+       # 尝试获取简单数据
+       result = xtdata.get_trading_dates("SH")
+       print(f"xtdata连接正常，获取到{len(result)}个交易日")
+   except Exception as e:
+       print(f"xtdata连接失败: {e}")
+   ```
+
+### 5.4.3 数据获取常见错误
+
+**错误1**: "连接超时"
+- **原因**: 网络连接不稳定或服务响应慢
+- **解决**: 增加超时时间，检查网络连接，重试请求
+
+**错误2**: "股票代码不存在"
+- **原因**: 股票代码格式错误或股票已退市
+- **解决**: 确认股票代码格式（如600519.SH），使用活跃交易的股票
+
+**错误3**: "数据不可用"
+- **原因**: 查询日期范围内无交易日或数据源暂时不可用
+- **解决**: 调整日期范围，确认交易日历，检查数据源状态
+
+**错误4**: "权限不足"
+- **原因**: 没有访问特定数据的权限
+- **解决**: 确认数据订阅状态，联系数据提供商
+
+### 5.4.4 性能问题排查
+
+**问题**: API响应速度慢
+**排查步骤**:
+1. **测量响应时间**:
+   ```python
+   import time
+   import requests
+   
+   start_time = time.time()
+   response = requests.get("http://localhost:8000/api/v1/get_trading_dates?market=SH")
+   end_time = time.time()
+   
+   print(f"响应时间: {end_time - start_time:.2f}秒")
+   ```
+
+2. **检查系统资源**:
+   ```powershell
+   # 检查CPU和内存使用
+   Get-Process -Name python | Select-Object CPU, WorkingSet
+   ```
+
+3. **优化建议**:
+   - 减少单次请求的数据量
+   - 使用批量请求替代多次单独请求
+   - 实现本地缓存机制
+   - 考虑异步请求处理
 
 ## 6. 性能优化建议
 
@@ -207,33 +390,36 @@ def get_new_data(self, param1, param2):
     return self.call_api(endpoint, params)
 ```
 
-### 7.2 自定义模拟数据
+### 7.2 自定义错误处理
 
-可以通过扩展 `common/mock_data.py` 中的 `MockDataGenerator` 类来添加新的模拟数据生成方法：
+可以通过扩展 `common/utils.py` 来添加自定义的错误处理函数：
 
 ```python
-def generate_new_data(self, param1, param2):
-    """生成新的模拟数据
+def handle_api_error(error_response, context="API调用"):
+    """处理API错误响应
     
     Args:
-        param1: 参数1说明
-        param2: 参数2说明
+        error_response: 错误响应对象
+        context: 错误上下文描述
         
     Returns:
-        Dict: 模拟数据
+        Dict: 标准化的错误信息
     """
-    # 生成模拟数据的逻辑
-    mock_data = {
-        "field1": "value1",
-        "field2": 123,
-        # ...
+    error_info = {
+        "context": context,
+        "error_code": error_response.get("code", -1),
+        "error_message": error_response.get("message", "未知错误"),
+        "timestamp": datetime.now().isoformat(),
+        "suggestions": []
     }
     
-    return {
-        "code": 0,
-        "message": "success",
-        "data": mock_data
-    }
+    # 根据错误类型添加建议
+    if "连接" in error_info["error_message"]:
+        error_info["suggestions"].append("检查网络连接和API服务状态")
+    elif "权限" in error_info["error_message"]:
+        error_info["suggestions"].append("确认数据访问权限和订阅状态")
+    
+    return error_info
 ```
 
 ### 7.3 添加新的工具函数
@@ -256,7 +442,34 @@ def new_utility_function(param):
     return result
 ```
 
-## 8. 联系与支持
+## 8. WebSocket 实时数据教程
+
+### 8.1 WebSocket 教程概述
+
+WebSocket 实时数据教程是本项目的重要组成部分，提供了完整的实时数据处理解决方案：
+
+- **08_websocket_realtime_data.py**: WebSocket 基础教程，学习实时数据订阅和处理
+- **09_websocket_rest_integration.py**: WebSocket 与 REST API 集成，构建完整的数据应用
+- **10_websocket_performance_optimization.py**: WebSocket 性能优化，提升系统性能和稳定性
+- **11_websocket_troubleshooting_guide.py**: WebSocket 故障排除，快速诊断和解决问题
+
+### 8.2 WebSocket 示例应用
+
+`examples/` 目录包含了丰富的 WebSocket 示例应用：
+
+- **websocket_client_python.py**: Python WebSocket 客户端完整实现
+- **websocket_client_javascript.html**: JavaScript WebSocket 客户端示例
+- **realtime_market_monitor.py**: 实时市场监控和交易信号应用
+
+### 8.3 WebSocket 学习建议
+
+1. **按顺序学习**: 从基础教程开始，逐步深入高级主题
+2. **实践为主**: 每个教程都包含可运行的示例代码
+3. **理解原理**: 重点理解 WebSocket 协议和实时数据处理机制
+4. **性能优化**: 学习如何优化 WebSocket 应用的性能和稳定性
+5. **故障排除**: 掌握常见问题的诊断和解决方法
+
+## 9. 联系与支持
 
 如有问题或需要支持，请通过以下方式联系我们：
 
@@ -266,7 +479,7 @@ def new_utility_function(param):
 
 ---
 
-*本文档最后更新于: 2025年7月17日*
+*本文档最后更新于: 2025年1月15日*
 ## 
 9. 使用指南和最佳实践
 

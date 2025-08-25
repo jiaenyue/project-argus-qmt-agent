@@ -94,14 +94,14 @@ graph LR
     end
 
     subgraph "质量监控工具与指标"
-        L0 -- "API成功率, 配额" --> M1(Prometheus)
+        L0 -- "API成功率, 配额" --> M1(Windows Performance Counters)
         L1 -- "格式/结构校验" --> M2(Great Expectations)
         L2 -- "多源一致性, 业务逻辑" --> M3("GE + 自定义校验器")
-        L3 -- "Schema合规, 事务完整性" --> M4(Delta Lake Audits)
+        L3 -- "Schema合规, 文件完整性" --> M4(Parquet文件审计)
         L4 -- "回测基准偏差" --> M5("Nautilus Logs/Metrics")
     end
 
-    M1 --> VIZ[Grafana 质量看板]
+    M1 --> VIZ[简单Web界面 质量看板]
     M2 --> VIZ
     M3 --> VIZ
     M4 --> VIZ
@@ -161,13 +161,13 @@ graph LR
 #### 6.1. 数据变更管理
 *   **Schema变更:** 任何对Gold层Schema的变更（特别是修改和删除）必须通过项目团队的PR（Pull Request）进行评审和批准。
 *   **兼容性策略:** 优先采用向后兼容的字段添加（`ADD COLUMNS`），严禁破坏性操作（`DROP`或`RENAME`）。
-*   **数据版本化:** 利用Delta Lake的Time Travel能力，所有数据变更均有历史版本快照，支持审计和回滚。
+*   **数据版本化:** 利用文件系统的版本控制能力，所有数据变更均有历史版本快照，支持审计和回滚。
 
 #### 6.2. 异常处理标准作业程序 (SOP)
 ```mermaid
 graph TB
     subgraph "SOP: 数据质量异常处理"
-        A["发现异常<br>(Prometheus/GE告警)"] --> B{"判断严重级别 P0/P1/P2"}
+        A["发现异常<br>(Windows事件日志/GE告警)"] --> B{"判断严重级别 P0/P1/P2"}
         B --"P0: 管道中断/核心数据污染"--> C["1. 停止下游任务<br>2. 电话/App告警核心团队<br>3. 自动触发故障转移"]
         B --"P1: 关键规则失败/可隔离"--> D["1. 隔离问题数据分区<br>2. 自动触发修复任务<br>3. IM+邮件告警"]
         B --"P2: 非核心指标告警"--> E["1. 记录警告日志<br>2. 创建普通工单<br>3. 在日会中跟踪"]

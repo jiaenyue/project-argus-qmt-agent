@@ -1,0 +1,92 @@
+# WebSocket 实时数据服务生产环境配置
+
+environment: production
+
+websocket:
+  host: "0.0.0.0"
+  port: 8765
+  max_connections: 2000
+  max_subscriptions_per_client: 200
+  heartbeat_interval: 30.0
+  max_message_size: 1048576  # 1MB
+  ping_interval: 20.0
+  ping_timeout: 20.0
+  close_timeout: 10.0
+  max_queue: 64
+
+service_discovery:
+  backend: consul
+  consul_host: consul.production.local
+  consul_port: 8500
+  etcd_endpoints:
+    - etcd1.production.local:2379
+    - etcd2.production.local:2379
+    - etcd3.production.local:2379
+  service_name: websocket-server
+  health_check_interval: 10.0
+  heartbeat_interval: 15.0
+
+load_balancing:
+  strategy: least_connections
+  rate_limit_rpm: 120
+  burst_size: 20
+  sticky_sessions: true
+
+scaling:
+  min_instances: 3
+  max_instances: 20
+  target_cpu_utilization: 70.0
+  target_memory_utilization: 80.0
+  target_connections_per_instance: 800
+  scale_up_cooldown: 300.0
+  scale_down_cooldown: 600.0
+  evaluation_interval: 60.0
+
+security:
+  enable_auth: true
+  auth_token: "${AUTH_TOKEN}"
+  allowed_origins:
+    - "https://trading.company.com"
+    - "https://api.company.com"
+    - "https://dashboard.company.com"
+  ssl_enabled: true
+  ssl_cert_path: "/etc/ssl/certs/websocket.crt"
+  ssl_key_path: "/etc/ssl/private/websocket.key"
+  rate_limit_enabled: true
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - [%(process)d] - %(message)s"
+  file_path: "/app/logs/websocket-server.log"
+  max_file_size: 52428800  # 50MB
+  backup_count: 10
+  console_output: false
+
+monitoring:
+  enabled: true
+  metrics_port: 9090
+  metrics_path: "/metrics"
+  health_check_path: "/health"
+  readiness_check_path: "/ready"
+  prometheus_enabled: true
+  grafana_enabled: true
+
+cache:
+  enabled: true
+  redis_host: redis.production.local
+  redis_port: 6379
+  redis_db: 0
+  redis_password: "${REDIS_PASSWORD}"
+  max_size: 10000
+  ttl: 300.0
+  cleanup_interval: 60.0
+
+database:
+  enabled: true
+  host: postgres.production.local
+  port: 5432
+  database: websocket_prod
+  username: websocket_user
+  password: "${DATABASE_PASSWORD}"
+  pool_size: 20
+  max_overflow: 40

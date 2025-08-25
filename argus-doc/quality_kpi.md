@@ -18,7 +18,7 @@
 
 1.  **分层治理 (Layered Governance):** 在数据管道的每一层（采集、处理、融合、存储、应用）设立独立的质量门禁，问题发现越早，修复成本越低。
 2.  **质量即代码 (Quality as Code):** 所有数据质量规则、期望和测试均以代码形式（如Great Expectations的JSON/Python）进行版本控制，确保一致性、可复现性和自动化。
-3.  **主动监控，而非被动响应 (Proactive Monitoring):** 通过实时指标监控（Prometheus）、可视化看板（Grafana）和主动告警（Alertmanager），在数据问题影响下游业务前发现并处理它。
+3.  **主动监控，而非被动响应 (Proactive Monitoring):** 通过实时指标监控（Windows性能计数器）、可视化看板（简单Web界面）和主动告警（Windows事件日志），在数据问题影响下游业务前发现并处理它。
 4.  **信任但验证 (Trust but Verify):** 任何数据源，无论主次，都必须经过交叉验证。**多源一致性**是本体系的信任基石和核心特色。
 5.  **质量决策自动化 (Automated Quality Gating):** 引入**智能质量决策引擎（QDE）**，根据预设规则和动态阈值，自动决定数据流转（通过、隔离、修复或告警），最大化效率与可靠性。
 
@@ -37,10 +37,10 @@ graph TD
 
     subgraph "质量监控维度与工具链"
         %% Links from layers to dimensions
-        A -- "API成功率, 配额健康度" --> M1[Prometheus]
+        A -- "API成功率, 配额健康度" --> M1[Windows Performance Counters]
         B -- "格式/结构校验, 异常值检测" --> M2[Great Expectations]
         C -- "多源一致性, 业务逻辑校验" --> M3["GE + 自定义校验器"]
-        D -- "Schema合规, 事务完整性" --> M4[Delta Lake审计]
+        D -- "Schema合规, 文件完整性" --> M4[Parquet文件审计]
         E -- "回测稳定性, 加载性能" --> M5["Nautilus回测日志/Metrics"]
     end
 
@@ -117,14 +117,14 @@ TARGET_SCORE = 95.0  # 关联 NFR-004
 
 #### 4.3 L3: 存储层门禁 (Gold Gate)
 *   **目的**：确保最终发布的“黄金数据”Schema合规、分区正确、可供消费。
-*   **示例规则 (Great Expectations / Delta Lake Checks)**:
+*   **示例规则 (Great Expectations / Parquet文件检查)**:
     ```json
     {
       "expectation_suite_name": "gold_publishable_suite",
       "expectations": [
         {"expectation_type": "expect_table_columns_to_match_ordered_list", "kwargs": {"column_list": ["date", "symbol", "open", "high", "low", "close", "volume", "pe_ratio", "..."]}},
         {"expectation_type": "expect_column_values_to_match_regex", "kwargs": {"column": "symbol", "regex": "^[0368]\\d{5}\\.(SH|SZ)$"}},
-        {"expectation_type": "expect_delta_table_has_no_uncompacted_files", "kwargs": {"max_uncompacted_files": 10}}
+        {"expectation_type": "expect_parquet_file_integrity", "kwargs": {"max_corrupted_files": 0}}
       ]
     }
     ```
@@ -163,7 +163,7 @@ def get_dynamic_consistency_threshold(market_volatility_index: float) -> float:
 
 ### 6. 数据质量可观测性 (Observability)
 
-#### 6.1 Grafana质量主看板设计
+#### 6.1 简单Web界面质量主看板设计
 | 面板组 | 核心指标 | 可视化形式 | 刷新频率 |
 | :--- | :--- | :--- | :--- |
 | **概览 & 评分** | **综合质量分 (今日/7日趋势)** | 单值大数字 & 折线图 | 30min |
@@ -176,16 +176,25 @@ def get_dynamic_consistency_threshold(market_volatility_index: float) -> float:
 | **问题洞察** | 近24小时告警列表 | 表格 | 1min |
 | | 质量规则失败分布 | 饼图 | 1h |
 
-#### 6.2 告警规则示例 (Prometheus/Alertmanager)
-```yaml
-- alert: CriticalMultiSourceConsistencyDrop
-  expr: avg_over_time(dq_multisource_consistency_ratio[15m]) < 0.99
-  for: 5m
-  labels:
-    severity: critical
-  annotations:
-    summary: "多源数据一致性严重下降 (值: {{ $value }})"
-    description: "主备数据源 (QMT/Tushare) 收盘价在过去15分钟内一致性低于99%，请立即排查！"
+#### 6.2 告警规则示例 (Windows事件日志)
+```python
+# Windows事件日志告警示例
+import win32evtlog
+
+def log_critical_consistency_alert(consistency_ratio: float):
+    """记录多源数据一致性告警到Windows事件日志"""
+    event_log = win32evtlog.OpenEventLog(None, "Application")
+    message = f"多源数据一致性严重下降 (值: {consistency_ratio:.4f})\n" \
+              f"主备数据源 (QMT/Tushare) 收盘价在过去15分钟内一致性低于99%，请立即排查！"
+    
+    win32evtlog.ReportEvent(
+        event_log,
+        win32evtlog.EVENTLOG_ERROR_TYPE,
+        0,  # category
+        1001,  # event ID
+        None,  # user SID
+        [message]
+    )
 ```
 
 ### 7. 质量治理与响应机制

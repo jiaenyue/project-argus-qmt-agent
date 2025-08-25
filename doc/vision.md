@@ -5,7 +5,7 @@
 现代量化交易系统需要访问多样化数据源，其中miniQMT（迅投量化交易客户端）是重要的金融数据来源。然而，miniQMT存在以下关键限制：
 1. **环境绑定**：只能运行在Windows操作系统
 2. **平台隔离**：其Python API（xtquant）深度依赖本地Windows环境
-3. **架构冲突**：与云原生/Docker化环境难以直接集成
+3. **架构冲突**：与现代化系统架构难以直接集成
 
 这导致量化团队面临两大困境：
 - 数据分析系统（如Project Argus）无法直接访问miniQMT实时数据
@@ -20,7 +20,7 @@
 ### 1. 环境解耦 (Decoupling)
 - **目标**: 将 Windows 平台的 miniQMT 依赖与上层数据消费系统 (如 Project Argus) 彻底隔离。
 - **价值**:
-    - 使得在 Docker、Linux/macOS 等非 Windows 环境中运行的量化策略、分析工具能够无缝、稳定地访问 miniQMT 数据。
+    - 使得量化策略、分析工具能够通过标准化HTTP API无缝、稳定地访问 miniQMT 数据。
     - 降低因平台差异导致的策略研发与生产环境的鸿沟，提升开发和部署效率。
 
 ### 2. 稳定可靠的API服务 (Stable & Reliable API Service)
